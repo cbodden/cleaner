@@ -18,7 +18,6 @@ from utils.ids import extract_ids
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
-
 @api_bp.route("/debug")
 def api_debug():
     """Debug: show libraries, a sample item, and its metadata resolution. Only when DEBUG=true in env."""
@@ -235,10 +234,15 @@ def api_libraries():
 
 @api_bp.route("/library/<section_id>")
 def api_library_media(section_id):
-    """Return media items for a library section."""
+    """Return media items for a library section.
+
+    When search is provided, results are filtered by title/sort_title or requested_by
+    (within the first SEARCH_FETCH_SIZE items by sort order).
+    """
     length = request.args.get("length", 50, type=int)
     start = request.args.get("start", 0, type=int)
     search = request.args.get("search", None)
+    search = search.strip() if search else None
     order_column = request.args.get("order_column", "last_played")
     order_dir = request.args.get("order_dir", "asc")
     allowed_columns = {
@@ -263,6 +267,8 @@ def api_library_media(section_id):
                     break
         except Exception:
             pass
+
+        # Title search via Tautulli; "Requested by" filter is done client-side on current page
         data = tautulli.get_library_media(
             section_id,
             length=length,
@@ -272,6 +278,7 @@ def api_library_media(section_id):
             order_dir=order_dir,
             section_type=section_type or None,
         )
+
         # Normalize file size for show libraries (Tautulli may use different keys)
         if section_type == "show" and isinstance(data.get("data"), list):
             for item in data["data"]:

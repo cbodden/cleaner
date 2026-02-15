@@ -2,8 +2,10 @@
 # Set DEBUG=true and STAT=true in env (e.g. docker-compose) as needed.
 FROM python:3.12-alpine
 
+ARG VERSION=1.2.0
 LABEL maintainer="cbodden" \
-      org.opencontainers.image.source="https://github.com/cbodden/cleaner"
+      org.opencontainers.image.source="https://github.com/cbodden/cleaner" \
+      version="${VERSION}"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1

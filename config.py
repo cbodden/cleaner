@@ -13,6 +13,9 @@ def _bool_env(name: str, default: bool = False) -> bool:
 DEBUG = _bool_env("DEBUG", False)
 STAT = _bool_env("STAT", True)
 
+VERSION = "1.2.0"
+GITHUB_REPO = "https://github.com/cbodden/cleaner"
+
 
 def _build_arr_instances(prefix: str, count: int = 2) -> list[dict]:
     """Read numbered *arr instance configs from env vars.

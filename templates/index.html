@@ -339,6 +339,24 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* Footer */
+  .app-footer {
+    margin-top: 2rem;
+    padding: 0.75rem 0;
+    font-size: 0.8125rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+  .app-footer-version { font-variant-numeric: tabular-nums; }
+  .app-footer-link {
+    color: var(--text-dim);
+    text-decoration: none;
+  }
+  .app-footer-link:hover { color: var(--text); }
+
   /* Toast */
   .toast-container {
     position: fixed;
@@ -456,7 +474,10 @@
       <option value="">Select a library...</option>
     </select>
     <div class="search-wrap" id="searchWrap" style="display:none;">
-      <input type="text" id="searchInput" placeholder="Search in this library..." />
+      <input type="text" id="searchInput" placeholder="Search titles..." />
+    </div>
+    <div class="search-wrap" id="requestorSearchWrap" style="display:none;">
+      <input type="text" id="requestorSearchInput" placeholder="Requested by..." />
     </div>
     <button class="btn-accent" id="loadBtn" disabled>Load</button>
   </div>
@@ -521,6 +542,11 @@
 
 <!-- Toasts -->
 <div class="toast-container" id="toasts"></div>
+
+<footer class="app-footer">
+  <span class="app-footer-version">v{{ version }}</span>
+  <a class="app-footer-link" href="{{ github_repo }}" target="_blank" rel="noopener noreferrer">GitHub</a>
+</footer>
 
 <script>
 (function() {
@@ -716,11 +742,13 @@
     body.innerHTML = '<tr><td colspan="9"><div class="table-loading"><span class="spinner"></span> Loading...</div></td></tr>';
     try {
       const search = $('#searchInput').value.trim();
+      const requestorSearch = $('#requestorSearchInput').value.trim();
       const isClientSort = sortColumn === 'requested_by';
       const apiSortCol = isClientSort ? 'last_played' : sortColumn;
       const apiSortDir = isClientSort ? 'asc' : sortDir;
       let url = `/api/library/${currentLib}?length=${PAGE_SIZE}&start=${page * PAGE_SIZE}&order_column=${apiSortCol}&order_dir=${apiSortDir}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
+      // Requested by is filtered client-side from current page (no requestor_search to avoid timeout)
       const res = await fetch(url);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -752,7 +780,7 @@
 
       updateSelectionBar();
 
-      // Fetch Seerr requestor info (skip for artist libraries)
+      // Fetch Seerr requestor info (skip for artist libraries); then show Requested by search box
       if (currentLibType === 'artist') {
         lastOsrInfo = {};
         renderTable(items, {});
@@ -769,11 +797,23 @@
           });
           const osrInfo = await osrRes.json();
           lastOsrInfo = osrInfo;
-          const displayItems = isClientSort
+          let displayItems = isClientSort
             ? sortItemsByRequestedBy(items, osrInfo, sortDir)
             : items;
+          // Client-side filter by Requested by (avoids slow backend timeout)
+          if (requestorSearch) {
+            const rq = requestorSearch.toLowerCase();
+            displayItems = displayItems.filter(it => {
+              const rb = (osrInfo[String(it.rating_key)] || {}).requested_by || '';
+              return rb.toLowerCase().includes(rq);
+            });
+            totalCount = displayItems.length;
+            $('#pageInfo').textContent = `Requested by "${requestorSearch}": ${displayItems.length} match(es) on this page`;
+            $('#paginationBar').style.display = 'none';
+          }
           renderTable(displayItems, osrInfo);
           updateSelectionBar();
+          $('#requestorSearchWrap').style.display = '';
         } catch {
           lastOsrInfo = {};
           renderTable(items, {});
@@ -904,6 +944,8 @@
     libraryLoaded = false;
     $('#searchWrap').style.display = 'none';
     $('#searchInput').value = '';
+    $('#requestorSearchWrap').style.display = 'none';
+    $('#requestorSearchInput').value = '';
   });
 
   $('#loadBtn').addEventListener('click', () => {
@@ -919,6 +961,12 @@
   });
 
   $('#searchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && currentLib) {
+      page = 0;
+      loadMedia();
+    }
+  });
+  $('#requestorSearchInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && currentLib) {
       page = 0;
       loadMedia();
