@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] - 2026-02-15
+
+### Added
+
+- **Search** — Search box appears when a library is loaded; searches only within the selected library and shows only matching items.
+- **Production WSGI** — `wsgi.py` and gunicorn; with `DEBUG=false`, `python app.py` runs gunicorn instead of the Flask dev server. Docker image uses gunicorn in CMD.
+- **DEBUG and STAT env flags** — `DEBUG` enables Flask debug mode and `/api/debug` routes; `STAT` enables `/api/status`. Both configurable via `.env` and Docker.
+
+### Changed
+
+- **Show library file column** — For TV show libraries, file column shows "—" when Tautulli does not provide file size (avoids incorrect "Missing" when files exist).
+- **README and Docker** — Document DEBUG/STAT, standalone vs Docker run; compose and Dockerfile set production defaults; workflow triggers on `docker/**` and app files.
+
 ## [1.1.0] - 2026-02-15
 
 ### Changed
@@ -36,5 +49,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Missing Plex metadata no longer blocks removal; Tautulli history and cache are still cleaned when Plex metadata is unavailable.
 
+[1.2.0]: https://github.com/cbodden/cleaner/releases/tag/v1.2.0
 [1.1.0]: https://github.com/cbodden/cleaner/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cbodden/cleaner/releases/tag/v1.0.0
