@@ -37,6 +37,7 @@ def _build_arr_instances(prefix, count=2):
 
 RADARR_INSTANCES = _build_arr_instances("RADARR")
 SONARR_INSTANCES = _build_arr_instances("SONARR")
+LIDARR_INSTANCES = _build_arr_instances("LIDARR")
 
 
 # ---------------------------------------------------------------------------
@@ -73,14 +74,15 @@ def get_tautulli_libraries():
     return data if isinstance(data, list) else []
 
 
-def get_library_media(section_id, length=50, start=0, search=None):
-    """Fetch media from a Tautulli library section sorted by last played."""
+def get_library_media(section_id, length=50, start=0, search=None,
+                      order_column="last_played", order_dir="asc"):
+    """Fetch media from a Tautulli library section."""
     params = {
         "section_id": section_id,
         "length": length,
         "start": start,
-        "order_column": "last_played",
-        "order_dir": "asc",
+        "order_column": order_column,
+        "order_dir": order_dir,
     }
     if search:
         params["search"] = search
@@ -229,19 +231,52 @@ def sonarr_delete_series(instance, series_id, delete_files=True):
 
 
 # ---------------------------------------------------------------------------
+# Lidarr helpers (multi-instance)
+# ---------------------------------------------------------------------------
+
+def lidarr_find_artist(instance, mbid):
+    """Find an artist in a Lidarr instance by MusicBrainz artist id."""
+    r = requests.get(
+        f"{instance['url']}/api/v1/artist",
+        params={"apikey": instance["api_key"]},
+        timeout=30,
+    )
+    r.raise_for_status()
+    for a in r.json():
+        if a.get("foreignArtistId") == str(mbid):
+            return a
+    return None
+
+
+def lidarr_delete_artist(instance, artist_id, delete_files=True):
+    """Delete an artist from a Lidarr instance."""
+    r = requests.delete(
+        f"{instance['url']}/api/v1/artist/{artist_id}",
+        params={"apikey": instance["api_key"],
+                "deleteFiles": str(delete_files).lower(),
+                "addImportListExclusion": "false"},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Utility: extract IDs from Tautulli metadata guids
 # ---------------------------------------------------------------------------
 
 def extract_ids(metadata):
-    """Pull TMDB and TVDB ids out of Tautulli metadata guids list."""
+    """Pull TMDB, TVDB, and MusicBrainz ids out of Tautulli metadata guids list."""
     guids = metadata.get("guids") or []
-    ids = {"tmdb": None, "tvdb": None}
+    ids = {"tmdb": None, "tvdb": None, "mbid": None}
     for g in guids:
         val = g if isinstance(g, str) else g.get("id", "")
         if "tmdb://" in val:
             ids["tmdb"] = val.split("tmdb://")[-1].split("?")[0]
         elif "tvdb://" in val:
             ids["tvdb"] = val.split("tvdb://")[-1].split("?")[0]
+        elif "mbid://" in val:
+            ids["mbid"] = val.split("mbid://")[-1].split("?")[0]
     return ids
 
 
@@ -256,15 +291,20 @@ def index():
 
 @app.route("/api/status")
 def api_status():
-    """Connectivity check for all configured services."""
-    status = {}
+    """Connectivity check for all configured services.
+
+    Returns a dict keyed by service name.  Each value is either an object
+    ``{"status": "ok", "version": "..."}`` or a string ``"error: ..."``.
+    """
+    result = {}
 
     # Tautulli
     try:
-        tautulli_get("get_tautulli_info")
-        status["tautulli"] = "ok"
+        info = tautulli_get("get_tautulli_info")
+        version = info.get("tautulli_version", "")
+        result["tautulli"] = {"status": "ok", "version": version}
     except Exception as e:
-        status["tautulli"] = f"error: {e}"
+        result["tautulli"] = f"error: {e}"
 
     # Overseerr
     try:
@@ -273,9 +313,10 @@ def api_status():
         r = requests.get(f"{OVERSEERR_URL}/api/v1/status",
                          headers=overseerr_headers(), timeout=10)
         r.raise_for_status()
-        status["overseerr"] = "ok"
+        version = r.json().get("version", "")
+        result["overseerr"] = {"status": "ok", "version": version}
     except Exception as e:
-        status["overseerr"] = f"error: {e}"
+        result["overseerr"] = f"error: {e}"
 
     # Radarr instances
     for i, inst in enumerate(RADARR_INSTANCES):
@@ -284,9 +325,10 @@ def api_status():
             r = requests.get(f"{inst['url']}/api/v3/system/status",
                              params={"apikey": inst["api_key"]}, timeout=10)
             r.raise_for_status()
-            status[key] = "ok"
+            version = r.json().get("version", "")
+            result[key] = {"status": "ok", "version": version}
         except Exception as e:
-            status[key] = f"error: {e}"
+            result[key] = f"error: {e}"
 
     # Sonarr instances
     for i, inst in enumerate(SONARR_INSTANCES):
@@ -295,11 +337,24 @@ def api_status():
             r = requests.get(f"{inst['url']}/api/v3/system/status",
                              params={"apikey": inst["api_key"]}, timeout=10)
             r.raise_for_status()
-            status[key] = "ok"
+            version = r.json().get("version", "")
+            result[key] = {"status": "ok", "version": version}
         except Exception as e:
-            status[key] = f"error: {e}"
+            result[key] = f"error: {e}"
 
-    return jsonify(status)
+    # Lidarr instances
+    for i, inst in enumerate(LIDARR_INSTANCES):
+        key = f"lidarr_{i + 1}"
+        try:
+            r = requests.get(f"{inst['url']}/api/v1/system/status",
+                             params={"apikey": inst["api_key"]}, timeout=10)
+            r.raise_for_status()
+            version = r.json().get("version", "")
+            result[key] = {"status": "ok", "version": version}
+        except Exception as e:
+            result[key] = f"error: {e}"
+
+    return jsonify(result)
 
 
 @app.route("/api/instances")
@@ -310,6 +365,8 @@ def api_instances():
                    for i, inst in enumerate(RADARR_INSTANCES)],
         "sonarr": [{"key": f"sonarr_{i+1}", "name": inst["name"]}
                    for i, inst in enumerate(SONARR_INSTANCES)],
+        "lidarr": [{"key": f"lidarr_{i+1}", "name": inst["name"]}
+                   for i, inst in enumerate(LIDARR_INSTANCES)],
     })
 
 
@@ -325,13 +382,23 @@ def api_libraries():
 
 @app.route("/api/library/<section_id>")
 def api_library_media(section_id):
-    """Return media items for a library section, sorted by last played."""
+    """Return media items for a library section."""
     length = request.args.get("length", 50, type=int)
     start = request.args.get("start", 0, type=int)
     search = request.args.get("search", None)
+    order_column = request.args.get("order_column", "last_played")
+    order_dir = request.args.get("order_dir", "asc")
+    # Whitelist allowed sort columns
+    allowed_columns = {"sort_title", "year", "added_at", "last_played",
+                       "play_count", "file_size"}
+    if order_column not in allowed_columns:
+        order_column = "last_played"
+    if order_dir not in ("asc", "desc"):
+        order_dir = "asc"
     try:
         data = get_library_media(section_id, length=length, start=start,
-                                 search=search)
+                                 search=search, order_column=order_column,
+                                 order_dir=order_dir)
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -403,15 +470,17 @@ def api_overseerr_info():
 @app.route("/api/remove", methods=["POST"])
 def api_remove():
     """
-    Remove media from Overseerr, Radarr/Sonarr (all instances), and Tautulli.
+    Remove media from Overseerr, Radarr/Sonarr/Lidarr (all instances), and
+    Tautulli.
 
     Expects JSON:
     {
         "rating_key": "...",
         "section_id": "...",
-        "media_type": "movie" | "show",
+        "media_type": "movie" | "show" | "artist",
         "tmdb_id": "...",    (optional — resolved via Tautulli if missing)
-        "tvdb_id": "..."     (optional — resolved via Tautulli if missing)
+        "tvdb_id": "...",    (optional — resolved via Tautulli if missing)
+        "mbid": "..."        (optional — resolved via Tautulli if missing)
     }
     """
     body = request.get_json(force=True)
@@ -420,36 +489,47 @@ def api_remove():
     media_type = body.get("media_type", "movie")
     tmdb_id = body.get("tmdb_id")
     tvdb_id = body.get("tvdb_id")
+    mbid = body.get("mbid")
 
     results = {"overseerr": None, "tautulli": None}
 
     try:
         # Resolve IDs from Tautulli metadata if not provided
-        if (not tmdb_id or (media_type == "show" and not tvdb_id)) and rating_key:
-            meta = get_metadata(rating_key)
-            ids = extract_ids(meta)
-            tmdb_id = tmdb_id or ids["tmdb"]
-            tvdb_id = tvdb_id or ids["tvdb"]
+        if rating_key:
+            needs_resolve = (
+                (not tmdb_id)
+                or (media_type == "show" and not tvdb_id)
+                or (media_type == "artist" and not mbid)
+            )
+            if needs_resolve:
+                meta = get_metadata(rating_key)
+                ids = extract_ids(meta)
+                tmdb_id = tmdb_id or ids["tmdb"]
+                tvdb_id = tvdb_id or ids["tvdb"]
+                mbid = mbid or ids["mbid"]
 
-        if not tmdb_id and not tvdb_id:
-            return jsonify({"error": "Could not determine TMDB/TVDB id"}), 400
+        if not tmdb_id and not tvdb_id and not mbid:
+            return jsonify({"error": "Could not determine TMDB/TVDB/MusicBrainz id"}), 400
 
-        # --- Overseerr ---
-        try:
-            if tmdb_id:
-                media = overseerr_find_media(tmdb_id, media_type)
-                if media and media.get("mediaInfo"):
-                    media_id = media["mediaInfo"]["id"]
-                    overseerr_delete_media(media_id)
-                    results["overseerr"] = "removed"
+        # --- Overseerr (not applicable for music) ---
+        if media_type == "artist":
+            results["overseerr"] = "skipped (music)"
+        else:
+            try:
+                if tmdb_id:
+                    media = overseerr_find_media(tmdb_id, media_type)
+                    if media and media.get("mediaInfo"):
+                        media_id = media["mediaInfo"]["id"]
+                        overseerr_delete_media(media_id)
+                        results["overseerr"] = "removed"
+                    else:
+                        results["overseerr"] = "not_found"
                 else:
-                    results["overseerr"] = "not_found"
-            else:
-                results["overseerr"] = "skipped (no TMDB id)"
-        except Exception as e:
-            results["overseerr"] = f"error: {e}"
+                    results["overseerr"] = "skipped (no TMDB id)"
+            except Exception as e:
+                results["overseerr"] = f"error: {e}"
 
-        # --- Radarr / Sonarr ---
+        # --- Radarr / Sonarr / Lidarr ---
         if media_type == "movie":
             for i, inst in enumerate(RADARR_INSTANCES):
                 key = f"radarr_{i + 1}"
@@ -464,6 +544,22 @@ def api_remove():
                             results[key] = "not_found"
                     else:
                         results[key] = "skipped (no TMDB id)"
+                except Exception as e:
+                    results[key] = f"error: {e}"
+        elif media_type == "artist":
+            for i, inst in enumerate(LIDARR_INSTANCES):
+                key = f"lidarr_{i + 1}"
+                try:
+                    if mbid:
+                        artist = lidarr_find_artist(inst, mbid)
+                        if artist:
+                            lidarr_delete_artist(inst, artist["id"],
+                                                 delete_files=True)
+                            results[key] = "removed"
+                        else:
+                            results[key] = "not_found"
+                    else:
+                        results[key] = "skipped (no MusicBrainz id)"
                 except Exception as e:
                     results[key] = f"error: {e}"
         else:

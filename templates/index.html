@@ -167,6 +167,32 @@
 
   thead th.check-col { width: 40px; text-align: center; }
 
+  thead th.sortable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 1.5rem;
+  }
+
+  thead th.sortable:hover { color: var(--text); }
+
+  thead th.sortable::after {
+    content: '⇅';
+    position: absolute;
+    right: 0.5rem;
+    opacity: 0.3;
+    font-size: 0.7rem;
+  }
+
+  thead th.sortable.sort-asc::after {
+    content: '↑';
+    opacity: 0.9;
+  }
+
+  thead th.sortable.sort-desc::after {
+    content: '↓';
+    opacity: 0.9;
+  }
+
   tbody tr {
     border-bottom: 1px solid var(--border);
     transition: background 0.1s;
@@ -386,6 +412,19 @@
     height: 8px;
     border-radius: 50%;
     background: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .status-chip .chip-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+
+  .status-chip .chip-version {
+    font-size: 0.625rem;
+    opacity: 0.6;
+    font-weight: 400;
   }
 
   .status-chip.ok .dot { background: var(--success); }
@@ -435,14 +474,14 @@
       <thead>
         <tr>
           <th class="check-col"><input type="checkbox" id="checkAll" title="Select all" /></th>
-          <th>Title</th>
-          <th>Year</th>
-          <th>Added</th>
-          <th>Last Played</th>
-          <th>Play Count</th>
+          <th class="sortable" data-sort="sort_title">Title</th>
+          <th class="sortable" data-sort="year">Year</th>
+          <th class="sortable" data-sort="added_at">Added</th>
+          <th class="sortable sort-asc" data-sort="last_played">Last Played</th>
+          <th class="sortable" data-sort="play_count">Play Count</th>
           <th>File</th>
-          <th>Size</th>
-          <th>Requested By</th>
+          <th class="sortable" data-sort="file_size">Size</th>
+          <th class="sortable" data-sort="requested_by">Requested By</th>
         </tr>
       </thead>
       <tbody id="mediaBody">
@@ -491,6 +530,10 @@
   let totalCount = 0;
   let selected = new Map();
   let statusKeys = [];
+  let sortColumn = 'last_played';
+  let sortDir = 'asc';
+  let lastItems = [];
+  let lastOsrInfo = null;
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
@@ -516,11 +559,12 @@
       const inst = await res.json();
       for (const r of (inst.radarr || [])) chips.push({ key: r.key, label: r.name });
       for (const s of (inst.sonarr || [])) chips.push({ key: s.key, label: s.name });
+      for (const l of (inst.lidarr || [])) chips.push({ key: l.key, label: l.name });
     } catch {}
 
     statusKeys = chips.map(c => c.key);
     bar.innerHTML = chips.map(c =>
-      `<div class="status-chip checking" id="st-${c.key}"><span class="dot"></span> ${c.label}</div>`
+      `<div class="status-chip checking" id="st-${c.key}"><span class="dot"></span> <span class="chip-text"><span class="chip-label">${c.label}</span></span></div>`
     ).join('');
   }
 
@@ -532,11 +576,19 @@
         const chip = $(`#st-${key}`);
         if (!chip) continue;
         chip.classList.remove('checking');
-        if (data[key] === 'ok') {
+        const val = data[key];
+        if (val && typeof val === 'object' && val.status === 'ok') {
           chip.classList.add('ok');
-        } else if (data[key]) {
+          if (val.version) {
+            const textEl = chip.querySelector('.chip-text');
+            const ver = document.createElement('span');
+            ver.className = 'chip-version';
+            ver.textContent = 'v' + val.version;
+            textEl.appendChild(ver);
+          }
+        } else if (val) {
           chip.classList.add('fail');
-          chip.title = data[key];
+          chip.title = typeof val === 'string' ? val : JSON.stringify(val);
         } else {
           chip.classList.add('fail');
           chip.title = 'not configured';
@@ -618,13 +670,35 @@
     }).join('');
   }
 
+  function updateSortHeaders() {
+    $$('thead th.sortable').forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.sort === sortColumn) {
+        th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+      }
+    });
+  }
+
+  function sortItemsByRequestedBy(items, osrInfo, dir) {
+    if (!osrInfo) return items;
+    return [...items].sort((a, b) => {
+      const aReq = (osrInfo[a.rating_key] && osrInfo[a.rating_key].requested_by) || '';
+      const bReq = (osrInfo[b.rating_key] && osrInfo[b.rating_key].requested_by) || '';
+      const cmp = aReq.localeCompare(bReq);
+      return dir === 'asc' ? cmp : -cmp;
+    });
+  }
+
   async function loadMedia() {
     if (!currentLib) return;
     const body = $('#mediaBody');
     body.innerHTML = '<tr><td colspan="9"><div class="table-loading"><span class="spinner"></span> Loading...</div></td></tr>';
     try {
       const search = $('#searchInput').value.trim();
-      let url = `/api/library/${currentLib}?length=${PAGE_SIZE}&start=${page * PAGE_SIZE}`;
+      const isClientSort = sortColumn === 'requested_by';
+      const apiSortCol = isClientSort ? 'last_played' : sortColumn;
+      const apiSortDir = isClientSort ? 'asc' : sortDir;
+      let url = `/api/library/${currentLib}?length=${PAGE_SIZE}&start=${page * PAGE_SIZE}&order_column=${apiSortCol}&order_dir=${apiSortDir}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
       const res = await fetch(url);
       const data = await res.json();
@@ -638,6 +712,10 @@
         $('#paginationBar').style.display = 'none';
         return;
       }
+
+      lastItems = items;
+      lastOsrInfo = null;
+      updateSortHeaders();
 
       renderTable(items, null);
 
@@ -661,9 +739,14 @@
           }),
         });
         const osrInfo = await osrRes.json();
-        renderTable(items, osrInfo);
+        lastOsrInfo = osrInfo;
+        const displayItems = isClientSort
+          ? sortItemsByRequestedBy(items, osrInfo, sortDir)
+          : items;
+        renderTable(displayItems, osrInfo);
         updateSelectionBar();
       } catch {
+        lastOsrInfo = {};
         renderTable(items, {});
       }
     } catch (e) {
@@ -779,8 +862,13 @@
 
   $('#loadBtn').addEventListener('click', () => {
     page = 0;
+    sortColumn = 'last_played';
+    sortDir = 'asc';
     selected.clear();
+    lastItems = [];
+    lastOsrInfo = null;
     updateSelectionBar();
+    updateSortHeaders();
     loadMedia();
   });
 
@@ -832,6 +920,31 @@
     selected.clear();
     $$('.row-check').forEach(cb => { cb.checked = false; cb.closest('tr').classList.remove('selected'); });
     updateSelectionBar();
+  });
+
+  // --- Column sorting ---
+  $$('thead th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (col === sortColumn) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortColumn = col;
+        sortDir = 'asc';
+      }
+
+      // "Requested By" is client-side only — re-sort cached data
+      if (col === 'requested_by' && lastItems.length && lastOsrInfo) {
+        updateSortHeaders();
+        const sorted = sortItemsByRequestedBy(lastItems, lastOsrInfo, sortDir);
+        renderTable(sorted, lastOsrInfo);
+        updateSelectionBar();
+        return;
+      }
+
+      page = 0;
+      loadMedia();
+    });
   });
 
   $('#removeBtn').addEventListener('click', removeSelected);

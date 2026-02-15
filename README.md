@@ -1,6 +1,6 @@
 # Media Cleaner
 
-A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Overseerr**, **Radarr**, **Sonarr**, and **Tautulli** in one click.
+A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Overseerr**, **Radarr**, **Sonarr**, **Lidarr**, and **Tautulli** in one click.
 
 ## What it does
 
@@ -9,7 +9,7 @@ A web app that shows your Tautulli library sorted by last played and lets you bu
 3. Select one or more items and hit **Remove Selected**
 4. For each item the app will:
    - Remove the request and clear media data in **Overseerr**
-   - Delete the movie/show (and files on disk) from all configured **Radarr** or **Sonarr** instances
+   - Delete the movie/show/artist (and files on disk) from all configured **Radarr**, **Sonarr**, or **Lidarr** instances
    - Purge play history and media cache from **Tautulli**
 
 ## Setup
@@ -46,6 +46,12 @@ cp .env.example .env
 | `SONARR_2_URL` | Secondary Sonarr base URL (leave blank to disable) |
 | `SONARR_2_API_KEY` | Secondary Sonarr API key |
 | `SONARR_2_NAME` | Display name (e.g. `Sonarr 4K`) |
+| `LIDARR_1_URL` | Primary Lidarr base URL |
+| `LIDARR_1_API_KEY` | Primary Lidarr API key |
+| `LIDARR_1_NAME` | Display name (e.g. `Lidarr`) |
+| `LIDARR_2_URL` | Secondary Lidarr base URL (leave blank to disable) |
+| `LIDARR_2_API_KEY` | Secondary Lidarr API key |
+| `LIDARR_2_NAME` | Display name (e.g. `Lidarr 4K`) |
 
 Leave any `_URL` blank to skip that instance.
 
@@ -65,7 +71,7 @@ Open **http://localhost:5000** in your browser.
 4. Check the items you want to remove
 5. Click **Remove Selected**, confirm, and the app handles the rest
 
-The library type (`movie` vs `show`) determines whether Radarr or Sonarr instances are used for deletion.
+The library type (`movie` vs `show` vs `artist`) determines whether Radarr, Sonarr, or Lidarr instances are used for deletion. Overseerr removal is skipped for music libraries since Overseerr does not manage music requests.
 
 ## License
 
