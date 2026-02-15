@@ -1,6 +1,6 @@
 # Media Cleaner
 
-A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Seerr**, **Radarr**, **Sonarr**, **Lidarr**, and **Tautulli** in one click.
+**Version 1.1.0** — A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Seerr**, **Radarr**, **Sonarr**, **Lidarr**, and **Tautulli** in one click.
 
 ## Screenshot
 

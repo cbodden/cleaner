@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.0] - 2025-02-15
+
+### Changed
+
+- **Seerr branding** — UI and docs use "Seerr" (Overseerr-compatible); request server chip and toasts show name from API.
+- **Status chip names** — All service chips (Tautulli, Seerr, Radarr, Sonarr, Lidarr) show name from respective API or instance config.
+- **Codebase refactor** — App split into config, services (tautulli, overseerr, radarr, sonarr, lidarr), routes (main, api), and utils; Flask app factory.
+
+### Fixed
+
+- **app.py** — Removed duplicate legacy code; entry point is create_app only.
+
 ## [1.0.0] - 2025-02-15
 
 ### Added
@@ -24,4 +36,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Missing Plex metadata no longer blocks removal; Tautulli history and cache are still cleaned when Plex metadata is unavailable.
 
+[1.1.0]: https://github.com/cbodden/cleaner/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cbodden/cleaner/releases/tag/v1.0.0
