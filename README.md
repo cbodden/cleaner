@@ -2,6 +2,12 @@
 
 A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Overseerr**, **Radarr**, **Sonarr**, **Lidarr**, and **Tautulli** in one click.
 
+## Screenshot
+
+<p align="center">
+  <img src="images/screenshot.jpg" width="600" />
+</p>
+
 ## What it does
 
 1. Pulls library media from **Tautulli**, sorted by last played (oldest first)
