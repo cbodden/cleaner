@@ -1,8 +1,6 @@
 services:
   cleaner:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: ghcr.io/cbodden/cleaner:latest
     container_name: media-cleaner
     ports:
       - "5000:5000"
