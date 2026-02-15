@@ -1,4 +1,4 @@
-"""Overseerr API client."""
+"""Seerr API client (Overseerr-compatible)."""
 import requests
 
 from config import OVERSEERR_API_KEY, OVERSEERR_URL
@@ -9,7 +9,7 @@ def overseerr_headers() -> dict:
 
 
 def overseerr_find_media(tmdb_id, media_type: str = "movie") -> dict | None:
-    """Look up media in Overseerr by TMDB id.
+    """Look up media in Seerr by TMDB id.
 
     media_type: "movie" or "show"
     """
@@ -28,7 +28,7 @@ def overseerr_find_media(tmdb_id, media_type: str = "movie") -> dict | None:
 
 
 def overseerr_delete_media(media_id) -> bool:
-    """Delete a media entry from Overseerr (removes request + clears data)."""
+    """Delete a media entry from Seerr (removes request + clears data)."""
     r = requests.delete(
         f"{OVERSEERR_URL}/api/v1/media/{media_id}",
         headers=overseerr_headers(),

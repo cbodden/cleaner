@@ -1,6 +1,6 @@
 # Media Cleaner
 
-A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Overseerr**, **Radarr**, **Sonarr**, **Lidarr**, and **Tautulli** in one click.
+A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Seerr**, **Radarr**, **Sonarr**, **Lidarr**, and **Tautulli** in one click.
 
 ## Screenshot
 
@@ -12,14 +12,14 @@ A web app that shows your Tautulli library sorted by last played and lets you bu
 
 1. Pulls library media from **Tautulli**, sorted by last played (oldest first)
 2. Click any column header to sort by title, year, added date, last played, play count, size, or requested by
-3. Shows the **Overseerr requestor** for each item when available
+3. Shows the **Seerr requestor** for each item when available
 4. Select one or more items and hit **Remove Selected**
 5. For each item the app will:
-   - Remove the request and clear media data in **Overseerr**
+   - Remove the request and clear media data in **Seerr**
    - Delete the movie/show/artist (and files on disk) from all configured **Radarr**, **Sonarr**, or **Lidarr** instances
    - Purge play history and media cache from **Tautulli**
 
-Items whose Plex metadata can no longer be resolved (e.g. removed from Plex but still cached in Tautulli) will still have their Tautulli history and cache cleaned up — the Overseerr and *arr steps are gracefully skipped.
+Items whose Plex metadata can no longer be resolved (e.g. removed from Plex but still cached in Tautulli) will still have their Tautulli history and cache cleaned up — the Seerr and *arr steps are gracefully skipped.
 
 ## Setup
 
@@ -41,8 +41,8 @@ cp .env.example .env
 |---|---|
 | `TAUTULLI_URL` | Tautulli base URL (e.g. `http://localhost:8181`) |
 | `TAUTULLI_API_KEY` | Tautulli API key (Settings > Web Interface) |
-| `OVERSEERR_URL` | Overseerr base URL (e.g. `http://localhost:5055`) |
-| `OVERSEERR_API_KEY` | Overseerr API key (Settings > General) |
+| `OVERSEERR_URL` | Seerr base URL (e.g. `http://localhost:5055`) |
+| `OVERSEERR_API_KEY` | Seerr API key (Settings > General) |
 | `RADARR_1_URL` | Primary Radarr base URL |
 | `RADARR_1_API_KEY` | Primary Radarr API key |
 | `RADARR_1_NAME` | Display name (e.g. `Radarr`) |
@@ -87,11 +87,11 @@ Open **http://localhost:5000** in your browser.
 
 1. Select a library from the dropdown and click **Load**
 2. Items are sorted by last played (oldest first) — stale content floats to the top
-3. The **Requested By** column shows who originally requested the item in Overseerr
+3. The **Requested By** column shows who originally requested the item in Seerr
 4. Check the items you want to remove
 5. Click **Remove Selected**, confirm, and the app handles the rest
 
-The library type (`movie` vs `show` vs `artist`) determines whether Radarr, Sonarr, or Lidarr instances are used for deletion. Overseerr removal is skipped for music libraries since Overseerr does not manage music requests.
+The library type (`movie` vs `show` vs `artist`) determines whether Radarr, Sonarr, or Lidarr instances are used for deletion. Seerr removal is skipped for music libraries since Seerr does not manage music requests.
 
 ## License
 

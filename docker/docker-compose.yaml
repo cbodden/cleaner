@@ -9,9 +9,9 @@ services:
       - TAUTULLI_URL=http://tautulli:8181
       - TAUTULLI_API_KEY=your_tautulli_api_key
 
-      # Overseerr
+      # Seerr (Overseerr-compatible)
       - OVERSEERR_URL=http://overseerr:5055
-      - OVERSEERR_API_KEY=your_overseerr_api_key
+      - OVERSEERR_API_KEY=your_seerr_api_key
 
       # Radarr (primary)
       - RADARR_1_URL=http://radarr:7878

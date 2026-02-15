@@ -508,7 +508,7 @@
 <div class="modal-overlay" id="confirmModal">
   <div class="modal">
     <h2>Confirm Removal</h2>
-    <p>The following items will be <strong>removed from Overseerr</strong> (request + data cleared), <strong>deleted from all configured Radarr/Sonarr instances</strong> (including files on disk), and <strong>purged from Tautulli</strong> (history + cache):</p>
+    <p>The following items will be <strong>removed from Seerr</strong> (request + data cleared), <strong>deleted from all configured Radarr/Sonarr instances</strong> (including files on disk), and <strong>purged from Tautulli</strong> (history + cache):</p>
     <ul id="confirmList"></ul>
     <div class="modal-actions">
       <button class="btn-ghost" id="cancelBtn">Cancel</button>
@@ -534,6 +534,7 @@
   let sortDir = 'asc';
   let lastItems = [];
   let lastOsrInfo = null;
+  let seerrDisplayName = 'Seerr';
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
@@ -547,12 +548,12 @@
     setTimeout(() => el.remove(), 4500);
   }
 
-  // --- Status chips ---
+  // --- Status chips (initial labels are placeholders; real names come from /api/status) ---
   async function initStatusBar() {
     const bar = $('#statusBar');
     const chips = [
-      { key: 'tautulli', label: 'Tautulli' },
-      { key: 'overseerr', label: 'Overseerr' },
+      { key: 'tautulli', label: '…' },
+      { key: 'overseerr', label: '…' },
     ];
     try {
       const res = await fetch('/api/instances');
@@ -579,6 +580,11 @@
         const val = data[key];
         if (val && typeof val === 'object' && val.status === 'ok') {
           chip.classList.add('ok');
+          if (val.name) {
+            const labelEl = chip.querySelector('.chip-label');
+            if (labelEl) labelEl.textContent = val.name;
+            if (key === 'overseerr') seerrDisplayName = val.name;
+          }
           if (val.version) {
             const textEl = chip.querySelector('.chip-text');
             const ver = document.createElement('span');
@@ -737,7 +743,7 @@
 
       updateSelectionBar();
 
-      // Fetch Overseerr requestor info (skip for artist libraries)
+      // Fetch Seerr requestor info (skip for artist libraries)
       if (currentLibType === 'artist') {
         lastOsrInfo = {};
         renderTable(items, {});
@@ -826,7 +832,7 @@
           }
           if (parts.length) {
             const labels = parts.map(p => {
-              if (p === 'overseerr') return 'Overseerr';
+              if (p === 'overseerr') return seerrDisplayName;
               if (p === 'tautulli') return 'Tautulli';
               if (p.startsWith('radarr_')) return p.replace('radarr_', 'Radarr ');
               if (p.startsWith('sonarr_')) return p.replace('sonarr_', 'Sonarr ');

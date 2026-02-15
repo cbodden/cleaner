@@ -17,8 +17,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - **ID resolution** — Extract IMDB IDs from Tautulli guids and legacy Plex agent formats; Radarr lookup falls back to IMDB when TMDB is unavailable.
-- **Graceful skip** — When no IDs can be resolved, Overseerr and *arr steps are skipped instead of failing; Tautulli cleanup still runs.
-- **Artist library display** — Correct file badge and Overseerr skip behavior for music libraries.
+- **Graceful skip** — When no IDs can be resolved, Seerr and *arr steps are skipped instead of failing; Tautulli cleanup still runs.
+- **Artist library display** — Correct file badge and Seerr skip behavior for music libraries.
 
 ### Fixed
 

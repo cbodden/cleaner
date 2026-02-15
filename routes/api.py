@@ -72,7 +72,13 @@ def api_status():
     try:
         info = tautulli.tautulli_get("get_tautulli_info")
         version = info.get("tautulli_version", "")
-        result["tautulli"] = {"status": "ok", "version": version}
+        name = (
+            info.get("tautulli_product")
+            or info.get("product")
+            or info.get("app_name")
+            or "Tautulli"
+        )
+        result["tautulli"] = {"status": "ok", "version": version, "name": name}
     except Exception as e:
         result["tautulli"] = f"error: {e}"
 
@@ -85,8 +91,15 @@ def api_status():
             timeout=10,
         )
         r.raise_for_status()
-        version = r.json().get("version", "")
-        result["overseerr"] = {"status": "ok", "version": version}
+        data = r.json()
+        version = data.get("version", "")
+        name = (
+            data.get("applicationTitle")
+            or data.get("title")
+            or data.get("name")
+            or "Seerr"
+        )
+        result["overseerr"] = {"status": "ok", "version": version, "name": name}
     except Exception as e:
         result["overseerr"] = f"error: {e}"
 
@@ -99,8 +112,15 @@ def api_status():
                 timeout=10,
             )
             r.raise_for_status()
-            version = r.json().get("version", "")
-            result[key] = {"status": "ok", "version": version}
+            data = r.json()
+            version = data.get("version", "")
+            name = (
+                data.get("instanceName")
+                or data.get("appName")
+                or data.get("name")
+                or inst["name"]
+            )
+            result[key] = {"status": "ok", "version": version, "name": name}
         except Exception as e:
             result[key] = f"error: {e}"
 
@@ -113,8 +133,15 @@ def api_status():
                 timeout=10,
             )
             r.raise_for_status()
-            version = r.json().get("version", "")
-            result[key] = {"status": "ok", "version": version}
+            data = r.json()
+            version = data.get("version", "")
+            name = (
+                data.get("instanceName")
+                or data.get("appName")
+                or data.get("name")
+                or inst["name"]
+            )
+            result[key] = {"status": "ok", "version": version, "name": name}
         except Exception as e:
             result[key] = f"error: {e}"
 
@@ -127,8 +154,15 @@ def api_status():
                 timeout=10,
             )
             r.raise_for_status()
-            version = r.json().get("version", "")
-            result[key] = {"status": "ok", "version": version}
+            data = r.json()
+            version = data.get("version", "")
+            name = (
+                data.get("instanceName")
+                or data.get("appName")
+                or data.get("name")
+                or inst["name"]
+            )
+            result[key] = {"status": "ok", "version": version, "name": name}
         except Exception as e:
             result[key] = f"error: {e}"
 
@@ -200,7 +234,7 @@ def api_library_media(section_id):
 
 @api_bp.route("/overseerr-info", methods=["POST"])
 def api_overseerr_info():
-    """Batch-lookup Overseerr requestor info for a list of rating keys.
+    """Batch-lookup Seerr requestor info for a list of rating keys.
 
     Expects JSON:
     {
@@ -265,7 +299,7 @@ def api_overseerr_info():
 @api_bp.route("/remove", methods=["POST"])
 def api_remove():
     """
-    Remove media from Overseerr, Radarr/Sonarr/Lidarr (all instances), and
+    Remove media from Seerr, Radarr/Sonarr/Lidarr (all instances), and
     Tautulli.
 
     Expects JSON:
