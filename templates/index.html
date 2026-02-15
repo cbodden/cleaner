@@ -645,15 +645,25 @@
       const addedAt = item.added_at
         ? new Date(item.added_at * 1000).toLocaleDateString()
         : '—';
-      const fileSize = item.file_size
-        ? formatBytes(Number(item.file_size))
-        : '—';
-      const hasFile = item.file_size && Number(item.file_size) > 0;
+      const rawSize = Number(item.file_size) || 0;
+      const fileSize = rawSize > 0 ? formatBytes(rawSize) : '—';
+      let fileBadge;
+      if (rawSize > 0) {
+        fileBadge = '<span class="badge badge-file">On Disk</span>';
+      } else if (currentLibType === 'artist') {
+        fileBadge = '<span class="dim">—</span>';
+      } else {
+        fileBadge = '<span class="badge badge-nofile">Missing</span>';
+      }
 
       const osr = overseerrInfo ? overseerrInfo[rk] : null;
-      let reqByHtml = '<span class="cell-loading">loading...</span>';
-      if (overseerrInfo) {
+      let reqByHtml;
+      if (currentLibType === 'artist') {
+        reqByHtml = '<span class="dim">—</span>';
+      } else if (overseerrInfo) {
         reqByHtml = (osr && osr.requested_by) ? esc(osr.requested_by) : '<span class="dim">—</span>';
+      } else {
+        reqByHtml = '<span class="cell-loading">loading...</span>';
       }
 
       return `<tr class="${selClass}" data-rk="${rk}">
@@ -663,7 +673,7 @@
         <td class="dim">${addedAt}</td>
         <td class="dim">${lastPlayed}</td>
         <td class="dim">${item.play_count || 0}</td>
-        <td>${hasFile ? '<span class="badge badge-file">On Disk</span>' : '<span class="badge badge-nofile">Missing</span>'}</td>
+        <td>${fileBadge}</td>
         <td class="dim">${fileSize}</td>
         <td class="dim">${reqByHtml}</td>
       </tr>`;
@@ -727,27 +737,32 @@
 
       updateSelectionBar();
 
-      // Fetch Overseerr requestor info then re-render
-      const ratingKeys = items.map(i => String(i.rating_key));
-      try {
-        const osrRes = await fetch('/api/overseerr-info', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rating_keys: ratingKeys,
-            media_type: currentLibType || 'movie',
-          }),
-        });
-        const osrInfo = await osrRes.json();
-        lastOsrInfo = osrInfo;
-        const displayItems = isClientSort
-          ? sortItemsByRequestedBy(items, osrInfo, sortDir)
-          : items;
-        renderTable(displayItems, osrInfo);
-        updateSelectionBar();
-      } catch {
+      // Fetch Overseerr requestor info (skip for artist libraries)
+      if (currentLibType === 'artist') {
         lastOsrInfo = {};
         renderTable(items, {});
+      } else {
+        const ratingKeys = items.map(i => String(i.rating_key));
+        try {
+          const osrRes = await fetch('/api/overseerr-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rating_keys: ratingKeys,
+              media_type: currentLibType || 'movie',
+            }),
+          });
+          const osrInfo = await osrRes.json();
+          lastOsrInfo = osrInfo;
+          const displayItems = isClientSort
+            ? sortItemsByRequestedBy(items, osrInfo, sortDir)
+            : items;
+          renderTable(displayItems, osrInfo);
+          updateSelectionBar();
+        } catch {
+          lastOsrInfo = {};
+          renderTable(items, {});
+        }
       }
     } catch (e) {
       body.innerHTML = `<tr><td colspan="9"><div class="empty-state"><p>Error: ${esc(e.message)}</p></div></td></tr>`;
