@@ -11,12 +11,15 @@ A web app that shows your Tautulli library sorted by last played and lets you bu
 ## What it does
 
 1. Pulls library media from **Tautulli**, sorted by last played (oldest first)
-2. Shows the **Overseerr requestor** for each item when available
-3. Select one or more items and hit **Remove Selected**
-4. For each item the app will:
+2. Click any column header to sort by title, year, added date, last played, play count, size, or requested by
+3. Shows the **Overseerr requestor** for each item when available
+4. Select one or more items and hit **Remove Selected**
+5. For each item the app will:
    - Remove the request and clear media data in **Overseerr**
    - Delete the movie/show/artist (and files on disk) from all configured **Radarr**, **Sonarr**, or **Lidarr** instances
    - Purge play history and media cache from **Tautulli**
+
+Items whose Plex metadata can no longer be resolved (e.g. removed from Plex but still cached in Tautulli) will still have their Tautulli history and cache cleaned up — the Overseerr and *arr steps are gracefully skipped.
 
 ## Setup
 

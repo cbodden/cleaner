@@ -816,6 +816,7 @@
         });
         const data = await res.json();
         if (data.error) {
+          console.error('Remove failed:', info.title, data);
           toast(`Failed: ${info.title} — ${data.error}`, 'error');
           failCount++;
         } else {
