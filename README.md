@@ -39,6 +39,8 @@ cp .env.example .env
 
 | Variable | Description |
 |---|---|
+| `DEBUG` | Set to `true` for development (Flask dev server, `/api/debug` routes enabled). Default `false` (production WSGI). |
+| `STAT` | Set to `true` to enable the `/api/status` connectivity endpoint. Default `true`. |
 | `TAUTULLI_URL` | Tautulli base URL (e.g. `http://localhost:8181`) |
 | `TAUTULLI_API_KEY` | Tautulli API key (Settings > Web Interface) |
 | `OVERSEERR_URL` | Seerr base URL (e.g. `http://localhost:5055`) |
@@ -68,11 +70,18 @@ Leave any `_URL` blank to skip that instance.
 
 ### Standalone
 
+- **Production (default):** With `DEBUG` unset or `false`, `python app.py` runs **gunicorn** (production WSGI) on port 5000.
+- **Development:** Set `DEBUG=true` in `.env`, then `python app.py` runs the Flask dev server with reload.
+
+You can also run gunicorn directly:
+
 ```bash
-python app.py
+gunicorn -w 4 -b 0.0.0.0:5000 wsgi:application
 ```
 
 ### Docker
+
+The image runs **gunicorn** inside the container (no Flask dev server). Set `DEBUG` and `STAT` in the compose file or env as needed.
 
 ```bash
 cd docker

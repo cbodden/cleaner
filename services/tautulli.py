@@ -41,6 +41,7 @@ def get_library_media(
     search: str | None = None,
     order_column: str = "last_played",
     order_dir: str = "asc",
+    section_type: str | None = None,
 ):
     """Fetch media from a Tautulli library section."""
     params = {
@@ -52,6 +53,8 @@ def get_library_media(
     }
     if search:
         params["search"] = search
+    if section_type:
+        params["section_type"] = section_type
     return tautulli_get("get_library_media_info", params)
 
 

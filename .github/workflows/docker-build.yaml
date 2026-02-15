@@ -4,8 +4,11 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "docker/Dockerfile"
+      - "app.py"
+      - "config.py"
+      - "wsgi.py"
       - "requirements.txt"
+      - "docker/**"
     branches:
       - master
       - dev

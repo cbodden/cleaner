@@ -1,20 +1,19 @@
+# Production image: runs gunicorn (WSGI), not the Flask dev server.
+# Set DEBUG=true and STAT=true in env (e.g. docker-compose) as needed.
 FROM python:3.12-alpine
 
 LABEL maintainer="cbodden" \
       org.opencontainers.image.source="https://github.com/cbodden/cleaner"
 
-# Keeps Python from buffering stdout/stderr
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
-# Install dependencies first (layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY app.py config.py ./
+COPY app.py config.py wsgi.py ./
 COPY templates/ templates/
 COPY utils/ utils/
 COPY services/ services/
@@ -22,4 +21,4 @@ COPY routes/ routes/
 
 EXPOSE 5000
 
-CMD ["python", "app.py"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "wsgi:application"]

@@ -6,6 +6,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _bool_env(name: str, default: bool = False) -> bool:
+    return os.getenv(name, str(default)).lower() in ("true", "1", "yes")
+
+
+DEBUG = _bool_env("DEBUG", False)
+STAT = _bool_env("STAT", True)
+
+
 def _build_arr_instances(prefix: str, count: int = 2) -> list[dict]:
     """Read numbered *arr instance configs from env vars.
 

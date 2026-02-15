@@ -455,7 +455,9 @@
     <select id="librarySelect">
       <option value="">Select a library...</option>
     </select>
-    <input type="text" id="searchInput" placeholder="Search titles..." />
+    <div class="search-wrap" id="searchWrap" style="display:none;">
+      <input type="text" id="searchInput" placeholder="Search in this library..." />
+    </div>
     <button class="btn-accent" id="loadBtn" disabled>Load</button>
   </div>
 
@@ -535,6 +537,7 @@
   let lastItems = [];
   let lastOsrInfo = null;
   let seerrDisplayName = 'Seerr';
+  let libraryLoaded = false;
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
@@ -651,12 +654,14 @@
       const addedAt = item.added_at
         ? new Date(item.added_at * 1000).toLocaleDateString()
         : '—';
-      const rawSize = Number(item.file_size) || 0;
+      // Tautulli: movies use file_size; shows often have no file_size until media info cache is refreshed
+      const rawSize = getFileSize(item);
       const fileSize = rawSize > 0 ? formatBytes(rawSize) : '—';
       let fileBadge;
       if (rawSize > 0) {
         fileBadge = '<span class="badge badge-file">On Disk</span>';
-      } else if (currentLibType === 'artist') {
+      } else if (currentLibType === 'artist' || currentLibType === 'show') {
+        // Artist: no file concept. Show: Tautulli rarely has file_size at show level (only after cache refresh)
         fileBadge = '<span class="dim">—</span>';
       } else {
         fileBadge = '<span class="badge badge-nofile">Missing</span>';
@@ -726,9 +731,13 @@
       if (!items.length) {
         body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><p>No items found.</p></div></td></tr>';
         $('#paginationBar').style.display = 'none';
+        libraryLoaded = true;
+        $('#searchWrap').style.display = '';
         return;
       }
 
+      libraryLoaded = true;
+      $('#searchWrap').style.display = '';
       lastItems = items;
       lastOsrInfo = null;
       updateSortHeaders();
@@ -861,6 +870,18 @@
   }
 
   // --- Helpers ---
+  function getFileSize(item) {
+    if (!item) return 0;
+    const keys = ['file_size', 'total_file_size', 'size', 'total_size'];
+    for (const k of keys) {
+      const v = item[k];
+      if (v != null && v !== '') {
+        const n = Number(v);
+        if (!Number.isNaN(n) && n > 0) return n;
+      }
+    }
+    return 0;
+  }
   function formatBytes(bytes) {
     if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
@@ -880,6 +901,9 @@
     currentLib = this.value || null;
     currentLibType = currentLib ? (libraryMap[currentLib] || 'movie') : null;
     $('#loadBtn').disabled = !currentLib;
+    libraryLoaded = false;
+    $('#searchWrap').style.display = 'none';
+    $('#searchInput').value = '';
   });
 
   $('#loadBtn').addEventListener('click', () => {

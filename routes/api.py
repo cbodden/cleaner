@@ -5,11 +5,13 @@ import requests
 from flask import Blueprint, jsonify, request
 
 from config import (
+    DEBUG,
     LIDARR_INSTANCES,
     OVERSEERR_API_KEY,
     OVERSEERR_URL,
     RADARR_INSTANCES,
     SONARR_INSTANCES,
+    STAT,
 )
 from services import lidarr, overseerr, radarr, sonarr, tautulli
 from utils.ids import extract_ids
@@ -19,7 +21,9 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 @api_bp.route("/debug")
 def api_debug():
-    """Debug: show libraries, a sample item, and its metadata resolution."""
+    """Debug: show libraries, a sample item, and its metadata resolution. Only when DEBUG=true in env."""
+    if not DEBUG:
+        return jsonify({"error": "Debug routes are disabled"}), 404
     out = {}
     try:
         libs = tautulli.get_tautulli_libraries()
@@ -60,13 +64,44 @@ def api_debug():
     return jsonify(out)
 
 
+@api_bp.route("/debug/library/<section_id>")
+def api_debug_library(section_id):
+    """Return raw Tautulli response for a library. Only when DEBUG=true in env."""
+    if not DEBUG:
+        return jsonify({"error": "Debug routes are disabled"}), 404
+    try:
+        data = tautulli.get_library_media(section_id, length=2, start=0)
+        items = data.get("data", []) if isinstance(data, dict) else []
+        section_type = None
+        try:
+            libs = tautulli.get_tautulli_libraries()
+            for lib in (libs or []):
+                if str(lib.get("section_id")) == str(section_id):
+                    section_type = lib.get("section_type")
+                    break
+        except Exception:
+            pass
+        return jsonify({
+            "section_id": section_id,
+            "section_type": section_type,
+            "response_keys": list(data.keys()) if isinstance(data, dict) else [],
+            "first_item_keys": list(items[0].keys()) if items else [],
+            "first_item": items[0] if items else None,
+            "second_item": items[1] if len(items) > 1 else None,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/status")
 def api_status():
-    """Connectivity check for all configured services.
+    """Connectivity check for all configured services. Only when STAT=true in env.
 
     Returns a dict keyed by service name.  Each value is either an object
     {"status": "ok", "version": "..."} or a string "error: ...".
     """
+    if not STAT:
+        return jsonify({"error": "Status endpoint is disabled"}), 404
     result = {}
 
     try:
@@ -219,6 +254,15 @@ def api_library_media(section_id):
     if order_dir not in ("asc", "desc"):
         order_dir = "asc"
     try:
+        section_type = None
+        try:
+            libs = tautulli.get_tautulli_libraries()
+            for lib in (libs or []):
+                if str(lib.get("section_id")) == str(section_id):
+                    section_type = (lib.get("section_type") or "").lower()
+                    break
+        except Exception:
+            pass
         data = tautulli.get_library_media(
             section_id,
             length=length,
@@ -226,7 +270,28 @@ def api_library_media(section_id):
             search=search,
             order_column=order_column,
             order_dir=order_dir,
+            section_type=section_type or None,
         )
+        # Normalize file size for show libraries (Tautulli may use different keys)
+        if section_type == "show" and isinstance(data.get("data"), list):
+            for item in data["data"]:
+                if isinstance(item, dict):
+                    fs = item.get("file_size")
+                    tfs = item.get("total_file_size")
+                    if (fs is None or fs == 0 or fs == "") and tfs is not None:
+                        item["file_size"] = tfs
+                    # Fallback: use any size-like key with a positive value
+                    if (item.get("file_size") or 0) == 0:
+                        for key in ("total_file_size", "size", "total_size"):
+                            val = item.get(key)
+                            if val is not None and val != "":
+                                try:
+                                    n = int(val) if isinstance(val, str) else val
+                                    if n > 0:
+                                        item["file_size"] = n
+                                        break
+                                except (TypeError, ValueError):
+                                    pass
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
