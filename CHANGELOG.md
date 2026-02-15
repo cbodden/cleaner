@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.0] - 2026-02-15
+
+### Added
+
+- **Footer** — App footer with version and link to GitHub repo.
+
+### Changed
+
+- **Requested by search** — Filter is client-side on the current page only (avoids backend timeout). Second search box for "Requested by" appears after the column is populated.
+- **Docker** — Dockerfile version label (ARG VERSION) for image metadata.
+
 ## [1.2.0] - 2026-02-15
 
 ### Added
@@ -49,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Missing Plex metadata no longer blocks removal; Tautulli history and cache are still cleaned when Plex metadata is unavailable.
 
+[1.3.0]: https://github.com/cbodden/cleaner/releases/tag/v1.3.0
 [1.2.0]: https://github.com/cbodden/cleaner/releases/tag/v1.2.0
 [1.1.0]: https://github.com/cbodden/cleaner/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cbodden/cleaner/releases/tag/v1.0.0
