@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+.env.example
+docker
+venv
+__pycache__
+*.pyc
+*.pyo
+LICENSE
+README.md

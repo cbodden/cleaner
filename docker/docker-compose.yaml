@@ -1,0 +1,47 @@
+services:
+  cleaner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: media-cleaner
+    ports:
+      - "5000:5000"
+    environment:
+      # Tautulli
+      - TAUTULLI_URL=http://tautulli:8181
+      - TAUTULLI_API_KEY=your_tautulli_api_key
+
+      # Overseerr
+      - OVERSEERR_URL=http://overseerr:5055
+      - OVERSEERR_API_KEY=your_overseerr_api_key
+
+      # Radarr (primary)
+      - RADARR_1_URL=http://radarr:7878
+      - RADARR_1_API_KEY=your_radarr_api_key
+      - RADARR_1_NAME=Radarr
+
+      # Radarr (secondary — leave blank to disable)
+      - RADARR_2_URL=
+      - RADARR_2_API_KEY=
+      - RADARR_2_NAME=Radarr 4K
+
+      # Sonarr (primary)
+      - SONARR_1_URL=http://sonarr:8989
+      - SONARR_1_API_KEY=your_sonarr_api_key
+      - SONARR_1_NAME=Sonarr
+
+      # Sonarr (secondary — leave blank to disable)
+      - SONARR_2_URL=
+      - SONARR_2_API_KEY=
+      - SONARR_2_NAME=Sonarr 4K
+
+      # Lidarr (primary)
+      - LIDARR_1_URL=http://lidarr:8686
+      - LIDARR_1_API_KEY=your_lidarr_api_key
+      - LIDARR_1_NAME=Lidarr
+
+      # Lidarr (secondary — leave blank to disable)
+      - LIDARR_2_URL=
+      - LIDARR_2_API_KEY=
+      - LIDARR_2_NAME=Lidarr 4K
+    restart: unless-stopped

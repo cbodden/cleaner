@@ -57,8 +57,19 @@ Leave any `_URL` blank to skip that instance.
 
 ## Run
 
+### Standalone
+
 ```bash
 python app.py
+```
+
+### Docker
+
+```bash
+cd docker
+
+# Edit docker-compose.yaml with your API keys and URLs
+docker compose up -d
 ```
 
 Open **http://localhost:5000** in your browser.
