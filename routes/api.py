@@ -1,0 +1,396 @@
+"""API routes."""
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import requests
+from flask import Blueprint, jsonify, request
+
+from config import (
+    LIDARR_INSTANCES,
+    OVERSEERR_API_KEY,
+    OVERSEERR_URL,
+    RADARR_INSTANCES,
+    SONARR_INSTANCES,
+)
+from services import lidarr, overseerr, radarr, sonarr, tautulli
+from utils.ids import extract_ids
+
+api_bp = Blueprint("api", __name__, url_prefix="/api")
+
+
+@api_bp.route("/debug")
+def api_debug():
+    """Debug: show libraries, a sample item, and its metadata resolution."""
+    out = {}
+    try:
+        libs = tautulli.get_tautulli_libraries()
+        out["libraries"] = [
+            {
+                "section_id": l.get("section_id"),
+                "section_name": l.get("section_name"),
+                "section_type": l.get("section_type"),
+            }
+            for l in libs
+        ]
+    except Exception as e:
+        out["libraries_error"] = str(e)
+        return jsonify(out)
+
+    for lib in libs:
+        sid = lib.get("section_id")
+        try:
+            data = tautulli.get_library_media(sid, length=1, start=0)
+            items = data.get("data", []) if isinstance(data, dict) else []
+            if not items:
+                continue
+            item = items[0]
+            out["sample_library"] = sid
+            out["sample_item_keys"] = list(item.keys())
+            out["sample_item"] = item
+
+            rk = item.get("rating_key")
+            out["rating_key"] = rk
+            if rk:
+                meta = tautulli.get_metadata(rk)
+                out["metadata_from_rating_key"] = meta
+                out["extracted_ids"] = extract_ids(meta)
+            break
+        except Exception as e:
+            out[f"library_{sid}_error"] = str(e)
+
+    return jsonify(out)
+
+
+@api_bp.route("/status")
+def api_status():
+    """Connectivity check for all configured services.
+
+    Returns a dict keyed by service name.  Each value is either an object
+    {"status": "ok", "version": "..."} or a string "error: ...".
+    """
+    result = {}
+
+    try:
+        info = tautulli.tautulli_get("get_tautulli_info")
+        version = info.get("tautulli_version", "")
+        result["tautulli"] = {"status": "ok", "version": version}
+    except Exception as e:
+        result["tautulli"] = f"error: {e}"
+
+    try:
+        if not OVERSEERR_API_KEY:
+            raise ValueError("API key not set")
+        r = requests.get(
+            f"{OVERSEERR_URL}/api/v1/status",
+            headers=overseerr.overseerr_headers(),
+            timeout=10,
+        )
+        r.raise_for_status()
+        version = r.json().get("version", "")
+        result["overseerr"] = {"status": "ok", "version": version}
+    except Exception as e:
+        result["overseerr"] = f"error: {e}"
+
+    for i, inst in enumerate(RADARR_INSTANCES):
+        key = f"radarr_{i + 1}"
+        try:
+            r = requests.get(
+                f"{inst['url']}/api/v3/system/status",
+                params={"apikey": inst["api_key"]},
+                timeout=10,
+            )
+            r.raise_for_status()
+            version = r.json().get("version", "")
+            result[key] = {"status": "ok", "version": version}
+        except Exception as e:
+            result[key] = f"error: {e}"
+
+    for i, inst in enumerate(SONARR_INSTANCES):
+        key = f"sonarr_{i + 1}"
+        try:
+            r = requests.get(
+                f"{inst['url']}/api/v3/system/status",
+                params={"apikey": inst["api_key"]},
+                timeout=10,
+            )
+            r.raise_for_status()
+            version = r.json().get("version", "")
+            result[key] = {"status": "ok", "version": version}
+        except Exception as e:
+            result[key] = f"error: {e}"
+
+    for i, inst in enumerate(LIDARR_INSTANCES):
+        key = f"lidarr_{i + 1}"
+        try:
+            r = requests.get(
+                f"{inst['url']}/api/v1/system/status",
+                params={"apikey": inst["api_key"]},
+                timeout=10,
+            )
+            r.raise_for_status()
+            version = r.json().get("version", "")
+            result[key] = {"status": "ok", "version": version}
+        except Exception as e:
+            result[key] = f"error: {e}"
+
+    return jsonify(result)
+
+
+@api_bp.route("/instances")
+def api_instances():
+    """Return the configured instance names so the frontend can render chips."""
+    return jsonify({
+        "radarr": [
+            {"key": f"radarr_{i+1}", "name": inst["name"]}
+            for i, inst in enumerate(RADARR_INSTANCES)
+        ],
+        "sonarr": [
+            {"key": f"sonarr_{i+1}", "name": inst["name"]}
+            for i, inst in enumerate(SONARR_INSTANCES)
+        ],
+        "lidarr": [
+            {"key": f"lidarr_{i+1}", "name": inst["name"]}
+            for i, inst in enumerate(LIDARR_INSTANCES)
+        ],
+    })
+
+
+@api_bp.route("/libraries")
+def api_libraries():
+    """Return all Tautulli libraries."""
+    try:
+        libs = tautulli.get_tautulli_libraries()
+        return jsonify(libs)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/library/<section_id>")
+def api_library_media(section_id):
+    """Return media items for a library section."""
+    length = request.args.get("length", 50, type=int)
+    start = request.args.get("start", 0, type=int)
+    search = request.args.get("search", None)
+    order_column = request.args.get("order_column", "last_played")
+    order_dir = request.args.get("order_dir", "asc")
+    allowed_columns = {
+        "sort_title",
+        "year",
+        "added_at",
+        "last_played",
+        "play_count",
+        "file_size",
+    }
+    if order_column not in allowed_columns:
+        order_column = "last_played"
+    if order_dir not in ("asc", "desc"):
+        order_dir = "asc"
+    try:
+        data = tautulli.get_library_media(
+            section_id,
+            length=length,
+            start=start,
+            search=search,
+            order_column=order_column,
+            order_dir=order_dir,
+        )
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/overseerr-info", methods=["POST"])
+def api_overseerr_info():
+    """Batch-lookup Overseerr requestor info for a list of rating keys.
+
+    Expects JSON:
+    {
+        "rating_keys": ["123", "456", ...],
+        "media_type": "movie" | "show"
+    }
+
+    Returns a dict keyed by rating_key with requestor info.
+    """
+    body = request.get_json(force=True)
+    rating_keys = body.get("rating_keys", [])
+    media_type = body.get("media_type", "movie")
+
+    if not OVERSEERR_API_KEY:
+        return jsonify({})
+
+    def _lookup(rk):
+        result = {"rating_key": rk, "requested_by": None}
+        try:
+            meta = tautulli.get_metadata(rk)
+            ids = extract_ids(meta)
+            tmdb_id = ids.get("tmdb")
+            if not tmdb_id:
+                return result
+
+            media = overseerr.overseerr_find_media(tmdb_id, media_type)
+            if not media:
+                return result
+
+            media_info = media.get("mediaInfo")
+            if not media_info:
+                return result
+
+            reqs = media_info.get("requests") or []
+            requestors = []
+            for req in reqs:
+                user = req.get("requestedBy") or {}
+                name = (
+                    user.get("displayName")
+                    or user.get("plexUsername")
+                    or user.get("email")
+                    or None
+                )
+                if name and name not in requestors:
+                    requestors.append(name)
+            if requestors:
+                result["requested_by"] = ", ".join(requestors)
+        except Exception:
+            pass
+        return result
+
+    info = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_lookup, rk): rk for rk in rating_keys}
+        for fut in as_completed(futures):
+            res = fut.result()
+            info[res["rating_key"]] = res
+
+    return jsonify(info)
+
+
+@api_bp.route("/remove", methods=["POST"])
+def api_remove():
+    """
+    Remove media from Overseerr, Radarr/Sonarr/Lidarr (all instances), and
+    Tautulli.
+
+    Expects JSON:
+    {
+        "rating_key": "...",
+        "section_id": "...",
+        "media_type": "movie" | "show" | "artist",
+        "tmdb_id": "...",    (optional — resolved via Tautulli if missing)
+        "tvdb_id": "...",    (optional — resolved via Tautulli if missing)
+        "mbid": "..."        (optional — resolved via Tautulli if missing)
+    }
+    """
+    body = request.get_json(force=True)
+    rating_key = body.get("rating_key")
+    section_id = body.get("section_id")
+    media_type = body.get("media_type", "movie")
+    tmdb_id = body.get("tmdb_id")
+    tvdb_id = body.get("tvdb_id")
+    imdb_id = body.get("imdb_id")
+    mbid = body.get("mbid")
+
+    results = {"overseerr": None, "tautulli": None}
+
+    try:
+        if rating_key:
+            needs_resolve = (
+                (not tmdb_id and not imdb_id)
+                or (media_type == "show" and not tvdb_id)
+                or (media_type == "artist" and not mbid)
+            )
+            if needs_resolve:
+                meta = tautulli.get_metadata(rating_key)
+                ids = extract_ids(meta)
+                tmdb_id = tmdb_id or ids["tmdb"]
+                tvdb_id = tvdb_id or ids["tvdb"]
+                imdb_id = imdb_id or ids["imdb"]
+                mbid = mbid or ids["mbid"]
+
+        has_ids = tmdb_id or tvdb_id or imdb_id or mbid
+
+        if not has_ids:
+            results["overseerr"] = "skipped (no IDs resolved)"
+        elif media_type == "artist":
+            results["overseerr"] = "skipped (music)"
+        else:
+            try:
+                if tmdb_id:
+                    media = overseerr.overseerr_find_media(tmdb_id, media_type)
+                    if media and media.get("mediaInfo"):
+                        media_id = media["mediaInfo"]["id"]
+                        overseerr.overseerr_delete_media(media_id)
+                        results["overseerr"] = "removed"
+                    else:
+                        results["overseerr"] = "not_found"
+                else:
+                    results["overseerr"] = "skipped (no TMDB id)"
+            except Exception as e:
+                results["overseerr"] = f"error: {e}"
+
+        if not has_ids:
+            results["arr"] = "skipped (no IDs resolved)"
+        elif media_type == "movie":
+            for i, inst in enumerate(RADARR_INSTANCES):
+                key = f"radarr_{i + 1}"
+                try:
+                    movie = radarr.radarr_find_movie(
+                        inst, tmdb_id=tmdb_id, imdb_id=imdb_id
+                    )
+                    if movie:
+                        radarr.radarr_delete_movie(inst, movie["id"], delete_files=True)
+                        results[key] = "removed"
+                    else:
+                        results[key] = "not_found"
+                except Exception as e:
+                    results[key] = f"error: {e}"
+        elif media_type == "artist":
+            for i, inst in enumerate(LIDARR_INSTANCES):
+                key = f"lidarr_{i + 1}"
+                try:
+                    if mbid:
+                        artist = lidarr.lidarr_find_artist(inst, mbid)
+                        if artist:
+                            lidarr.lidarr_delete_artist(
+                                inst, artist["id"], delete_files=True
+                            )
+                            results[key] = "removed"
+                        else:
+                            results[key] = "not_found"
+                    else:
+                        results[key] = "skipped (no MusicBrainz id)"
+                except Exception as e:
+                    results[key] = f"error: {e}"
+        else:
+            for i, inst in enumerate(SONARR_INSTANCES):
+                key = f"sonarr_{i + 1}"
+                try:
+                    series = None
+                    if tvdb_id:
+                        series = sonarr.sonarr_find_series(inst, tvdb_id)
+                    if not series and tmdb_id:
+                        series = sonarr.sonarr_find_series_by_tmdb(inst, tmdb_id)
+                    if series:
+                        sonarr.sonarr_delete_series(
+                            inst, series["id"], delete_files=True
+                        )
+                        results[key] = "removed"
+                    else:
+                        results[key] = "not_found"
+                except Exception as e:
+                    results[key] = f"error: {e}"
+
+        try:
+            if rating_key:
+                deleted = tautulli.delete_tautulli_history(rating_key)
+                if section_id:
+                    tautulli.delete_tautulli_media_info_cache(section_id, rating_key)
+                results["tautulli"] = (
+                    f"removed ({deleted} history entries cleared)"
+                )
+            else:
+                results["tautulli"] = "skipped (no rating_key)"
+        except Exception as e:
+            results["tautulli"] = f"error: {e}"
+
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
