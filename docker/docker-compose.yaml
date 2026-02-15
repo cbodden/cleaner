@@ -1,6 +1,6 @@
 services:
   cleaner:
-    image: ghcr.io/cbodden/cleaner:latest
+    image: ghcr.io/cbodden/cleaner
     container_name: media-cleaner
     ports:
       - "5000:5000"
