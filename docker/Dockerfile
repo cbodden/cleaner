@@ -1,6 +1,7 @@
 FROM python:3.12-alpine
 
-LABEL maintainer="cbodden"
+LABEL maintainer="cbodden" \
+      org.opencontainers.image.source="https://github.com/cbodden/cleaner"
 
 # Keeps Python from buffering stdout/stderr
 ENV PYTHONUNBUFFERED=1 \
