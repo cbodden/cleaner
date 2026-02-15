@@ -158,17 +158,28 @@ def overseerr_delete_media(media_id):
 # Radarr helpers (multi-instance)
 # ---------------------------------------------------------------------------
 
-def radarr_find_movie(instance, tmdb_id):
-    """Find a movie in a Radarr instance by its TMDB id."""
-    r = requests.get(
-        f"{instance['url']}/api/v3/movie",
-        params={"apikey": instance["api_key"], "tmdbId": tmdb_id},
-        timeout=15,
-    )
-    r.raise_for_status()
-    movies = r.json()
-    if isinstance(movies, list) and movies:
-        return movies[0]
+def radarr_find_movie(instance, tmdb_id=None, imdb_id=None):
+    """Find a movie in a Radarr instance by TMDB or IMDB id."""
+    if tmdb_id:
+        r = requests.get(
+            f"{instance['url']}/api/v3/movie",
+            params={"apikey": instance["api_key"], "tmdbId": tmdb_id},
+            timeout=15,
+        )
+        r.raise_for_status()
+        movies = r.json()
+        if isinstance(movies, list) and movies:
+            return movies[0]
+    if imdb_id:
+        r = requests.get(
+            f"{instance['url']}/api/v3/movie",
+            params={"apikey": instance["api_key"]},
+            timeout=30,
+        )
+        r.raise_for_status()
+        for m in r.json():
+            if m.get("imdbId") == imdb_id:
+                return m
     return None
 
 
@@ -266,17 +277,35 @@ def lidarr_delete_artist(instance, artist_id, delete_files=True):
 # ---------------------------------------------------------------------------
 
 def extract_ids(metadata):
-    """Pull TMDB, TVDB, and MusicBrainz ids out of Tautulli metadata guids list."""
+    """Pull TMDB, TVDB, IMDB, and MusicBrainz ids out of Tautulli metadata guids list.
+
+    Also checks top-level metadata fields (e.g. ``guid``) as a fallback for
+    older Plex agent formats like ``com.plexapp.agents.imdb://tt1234567``.
+    """
     guids = metadata.get("guids") or []
-    ids = {"tmdb": None, "tvdb": None, "mbid": None}
+    ids = {"tmdb": None, "tvdb": None, "imdb": None, "mbid": None}
+
     for g in guids:
         val = g if isinstance(g, str) else g.get("id", "")
         if "tmdb://" in val:
             ids["tmdb"] = val.split("tmdb://")[-1].split("?")[0]
         elif "tvdb://" in val:
             ids["tvdb"] = val.split("tvdb://")[-1].split("?")[0]
+        elif "imdb://" in val:
+            ids["imdb"] = val.split("imdb://")[-1].split("?")[0]
         elif "mbid://" in val:
             ids["mbid"] = val.split("mbid://")[-1].split("?")[0]
+
+    # Fallback: legacy Plex agent guid stored at the top level
+    top_guid = metadata.get("guid", "")
+    if top_guid:
+        if not ids["imdb"] and "imdb://" in top_guid:
+            ids["imdb"] = top_guid.split("imdb://")[-1].split("?")[0]
+        if not ids["tmdb"] and "themoviedb://" in top_guid:
+            ids["tmdb"] = top_guid.split("themoviedb://")[-1].split("?")[0]
+        if not ids["tvdb"] and "thetvdb://" in top_guid:
+            ids["tvdb"] = top_guid.split("thetvdb://")[-1].split("?")[0]
+
     return ids
 
 
@@ -287,6 +316,47 @@ def extract_ids(metadata):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/debug")
+def api_debug():
+    """Debug: show libraries, a sample item, and its metadata resolution."""
+    out = {}
+    try:
+        libs = get_tautulli_libraries()
+        out["libraries"] = [{"section_id": l.get("section_id"),
+                             "section_name": l.get("section_name"),
+                             "section_type": l.get("section_type")}
+                            for l in libs]
+    except Exception as e:
+        out["libraries_error"] = str(e)
+        return jsonify(out)
+
+    # Try first library that has items
+    for lib in libs:
+        sid = lib.get("section_id")
+        try:
+            data = get_library_media(sid, length=1, start=0)
+            items = data.get("data", []) if isinstance(data, dict) else []
+            if not items:
+                continue
+            item = items[0]
+            out["sample_library"] = sid
+            out["sample_item_keys"] = list(item.keys())
+            out["sample_item"] = item
+
+            # Try get_metadata with rating_key
+            rk = item.get("rating_key")
+            out["rating_key"] = rk
+            if rk:
+                meta = get_metadata(rk)
+                out["metadata_from_rating_key"] = meta
+                out["extracted_ids"] = extract_ids(meta)
+            break
+        except Exception as e:
+            out[f"library_{sid}_error"] = str(e)
+
+    return jsonify(out)
 
 
 @app.route("/api/status")
@@ -489,6 +559,7 @@ def api_remove():
     media_type = body.get("media_type", "movie")
     tmdb_id = body.get("tmdb_id")
     tvdb_id = body.get("tvdb_id")
+    imdb_id = body.get("imdb_id")
     mbid = body.get("mbid")
 
     results = {"overseerr": None, "tautulli": None}
@@ -497,7 +568,7 @@ def api_remove():
         # Resolve IDs from Tautulli metadata if not provided
         if rating_key:
             needs_resolve = (
-                (not tmdb_id)
+                (not tmdb_id and not imdb_id)
                 or (media_type == "show" and not tvdb_id)
                 or (media_type == "artist" and not mbid)
             )
@@ -506,13 +577,15 @@ def api_remove():
                 ids = extract_ids(meta)
                 tmdb_id = tmdb_id or ids["tmdb"]
                 tvdb_id = tvdb_id or ids["tvdb"]
+                imdb_id = imdb_id or ids["imdb"]
                 mbid = mbid or ids["mbid"]
 
-        if not tmdb_id and not tvdb_id and not mbid:
-            return jsonify({"error": "Could not determine TMDB/TVDB/MusicBrainz id"}), 400
+        has_ids = tmdb_id or tvdb_id or imdb_id or mbid
 
         # --- Overseerr (not applicable for music) ---
-        if media_type == "artist":
+        if not has_ids:
+            results["overseerr"] = "skipped (no IDs resolved)"
+        elif media_type == "artist":
             results["overseerr"] = "skipped (music)"
         else:
             try:
@@ -530,20 +603,20 @@ def api_remove():
                 results["overseerr"] = f"error: {e}"
 
         # --- Radarr / Sonarr / Lidarr ---
-        if media_type == "movie":
+        if not has_ids:
+            results["arr"] = "skipped (no IDs resolved)"
+        elif media_type == "movie":
             for i, inst in enumerate(RADARR_INSTANCES):
                 key = f"radarr_{i + 1}"
                 try:
-                    if tmdb_id:
-                        movie = radarr_find_movie(inst, tmdb_id)
-                        if movie:
-                            radarr_delete_movie(inst, movie["id"],
-                                                delete_files=True)
-                            results[key] = "removed"
-                        else:
-                            results[key] = "not_found"
+                    movie = radarr_find_movie(inst, tmdb_id=tmdb_id,
+                                              imdb_id=imdb_id)
+                    if movie:
+                        radarr_delete_movie(inst, movie["id"],
+                                            delete_files=True)
+                        results[key] = "removed"
                     else:
-                        results[key] = "skipped (no TMDB id)"
+                        results[key] = "not_found"
                 except Exception as e:
                     results[key] = f"error: {e}"
         elif media_type == "artist":
