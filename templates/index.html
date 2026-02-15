@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Media Cleaner</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #181a24;
+    --surface2: #1f2231;
+    --border: #2a2d3e;
+    --text: #e2e4ed;
+    --text-dim: #8b8fa3;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --danger: #ef4444;
+    --danger-hover: #f87171;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --radius: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  header h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  header h1 span { color: var(--accent); }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+
+  select, input[type="text"] {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  select:focus, input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+
+  select { min-width: 200px; cursor: pointer; }
+  input[type="text"] { min-width: 220px; }
+
+  button {
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: none;
+    border-radius: var(--radius);
+    padding: 0.5rem 1rem;
+    transition: background 0.15s, opacity 0.15s;
+  }
+
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-accent {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-accent:hover:not(:disabled) { background: var(--accent-hover); }
+
+  .btn-danger {
+    background: var(--danger);
+    color: #fff;
+  }
+  .btn-danger:hover:not(:disabled) { background: var(--danger-hover); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
+  /* Selection bar */
+  .selection-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .selection-bar.visible { display: flex; }
+
+  .selection-bar .count {
+    font-size: 0.875rem;
+    color: var(--text-dim);
+  }
+  .selection-bar .count strong { color: var(--text); }
+
+  /* Table */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  thead th.check-col { width: 40px; text-align: center; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr.selected { background: rgba(99,102,241,0.08); }
+
+  td {
+    padding: 0.65rem 1rem;
+    font-size: 0.875rem;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  td.check-col { text-align: center; }
+
+  td.title-cell {
+    white-space: normal;
+    max-width: 350px;
+    font-weight: 500;
+  }
+
+  td.title-cell .year {
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-left: 0.35rem;
+  }
+
+  td.dim { color: var(--text-dim); }
+
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .pagination .page-btns { display: flex; gap: 0.5rem; }
+
+  /* Status badge */
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .badge-file { background: rgba(34,197,94,0.12); color: var(--success); }
+  .badge-nofile { background: rgba(245,158,11,0.12); color: var(--warning); }
+
+  .cell-loading {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-style: italic;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+
+  .modal h2 {
+    font-size: 1.1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .modal p {
+    color: var(--text-dim);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin-bottom: 1.25rem;
+  }
+
+  .modal ul {
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 1.25rem;
+    padding: 0.5rem;
+    background: var(--bg);
+    border-radius: var(--radius);
+    font-size: 0.8125rem;
+  }
+
+  .modal ul li {
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modal ul li:last-child { border-bottom: none; }
+
+  .modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+  }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.35rem;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  .toast-container {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .toast {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    font-size: 0.8125rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    animation: slideIn 0.25s ease-out;
+    max-width: 360px;
+  }
+
+  .toast.success { border-left: 3px solid var(--success); }
+  .toast.error { border-left: 3px solid var(--danger); }
+  .toast.info { border-left: 3px solid var(--accent); }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-dim);
+  }
+
+  .empty-state p { font-size: 0.9375rem; }
+
+  /* Loading overlay for table */
+  .table-loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-dim);
+    font-size: 0.875rem;
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  .status-chip .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  .status-chip.ok .dot { background: var(--success); }
+  .status-chip.fail .dot { background: var(--danger); }
+  .status-chip.checking .dot {
+    background: var(--warning);
+    animation: pulse 1s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>Media</span> Cleaner</h1>
+</header>
+
+<div class="container">
+  <!-- Status chips (populated dynamically) -->
+  <div class="status-bar" id="statusBar"></div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <select id="librarySelect">
+      <option value="">Select a library...</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="Search titles..." />
+    <button class="btn-accent" id="loadBtn" disabled>Load</button>
+  </div>
+
+  <!-- Selection bar -->
+  <div class="selection-bar" id="selectionBar">
+    <span class="count"><strong id="selCount">0</strong> item(s) selected</span>
+    <div>
+      <button class="btn-ghost" id="clearSelBtn">Clear Selection</button>
+      <button class="btn-danger" id="removeBtn">Remove Selected</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="check-col"><input type="checkbox" id="checkAll" title="Select all" /></th>
+          <th>Title</th>
+          <th>Year</th>
+          <th>Added</th>
+          <th>Last Played</th>
+          <th>Play Count</th>
+          <th>File</th>
+          <th>Size</th>
+          <th>Requested By</th>
+        </tr>
+      </thead>
+      <tbody id="mediaBody">
+        <tr>
+          <td colspan="9">
+            <div class="empty-state"><p>Select a library and click Load to get started.</p></div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="paginationBar" style="display:none;">
+    <span id="pageInfo"></span>
+    <div class="page-btns">
+      <button class="btn-ghost" id="prevBtn" disabled>&laquo; Prev</button>
+      <button class="btn-ghost" id="nextBtn" disabled>Next &raquo;</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <h2>Confirm Removal</h2>
+    <p>The following items will be <strong>removed from Overseerr</strong> (request + data cleared), <strong>deleted from all configured Radarr/Sonarr instances</strong> (including files on disk), and <strong>purged from Tautulli</strong> (history + cache):</p>
+    <ul id="confirmList"></ul>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="cancelBtn">Cancel</button>
+      <button class="btn-danger" id="confirmBtn">Remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+(function() {
+  const PAGE_SIZE = 50;
+  let currentLib = null;
+  let currentLibType = null;
+  let libraryMap = {};
+  let page = 0;
+  let totalCount = 0;
+  let selected = new Map();
+  let statusKeys = [];
+
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
+  // --- Toast ---
+  function toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), 4500);
+  }
+
+  // --- Status chips ---
+  async function initStatusBar() {
+    const bar = $('#statusBar');
+    const chips = [
+      { key: 'tautulli', label: 'Tautulli' },
+      { key: 'overseerr', label: 'Overseerr' },
+    ];
+    try {
+      const res = await fetch('/api/instances');
+      const inst = await res.json();
+      for (const r of (inst.radarr || [])) chips.push({ key: r.key, label: r.name });
+      for (const s of (inst.sonarr || [])) chips.push({ key: s.key, label: s.name });
+    } catch {}
+
+    statusKeys = chips.map(c => c.key);
+    bar.innerHTML = chips.map(c =>
+      `<div class="status-chip checking" id="st-${c.key}"><span class="dot"></span> ${c.label}</div>`
+    ).join('');
+  }
+
+  async function checkStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      for (const key of statusKeys) {
+        const chip = $(`#st-${key}`);
+        if (!chip) continue;
+        chip.classList.remove('checking');
+        if (data[key] === 'ok') {
+          chip.classList.add('ok');
+        } else if (data[key]) {
+          chip.classList.add('fail');
+          chip.title = data[key];
+        } else {
+          chip.classList.add('fail');
+          chip.title = 'not configured';
+        }
+      }
+    } catch {
+      for (const key of statusKeys) {
+        const chip = $(`#st-${key}`);
+        if (!chip) continue;
+        chip.classList.remove('checking');
+        chip.classList.add('fail');
+      }
+    }
+  }
+
+  // --- Libraries ---
+  async function loadLibraries() {
+    try {
+      const res = await fetch('/api/libraries');
+      if (!res.ok) {
+        const text = await res.text();
+        let msg;
+        try { msg = JSON.parse(text).error; } catch { msg = `HTTP ${res.status}`; }
+        throw new Error(msg);
+      }
+      const libs = await res.json();
+      if (libs.error) throw new Error(libs.error);
+      const sel = $('#librarySelect');
+      libs.forEach(lib => {
+        libraryMap[lib.section_id] = lib.section_type;
+        const opt = document.createElement('option');
+        opt.value = lib.section_id;
+        opt.textContent = `${lib.section_name} (${lib.section_type})`;
+        sel.appendChild(opt);
+      });
+      if (libs.length === 0) {
+        toast('No libraries returned from Tautulli — check your API key.', 'error');
+      }
+    } catch (e) {
+      toast('Failed to load libraries: ' + e.message, 'error');
+    }
+  }
+
+  // --- Media ---
+  function renderTable(items, overseerrInfo) {
+    const body = $('#mediaBody');
+    body.innerHTML = items.map(item => {
+      const rk = item.rating_key;
+      const isChecked = selected.has(String(rk)) ? 'checked' : '';
+      const selClass = isChecked ? 'selected' : '';
+      const lastPlayed = item.last_played
+        ? new Date(item.last_played * 1000).toLocaleDateString()
+        : 'Never';
+      const addedAt = item.added_at
+        ? new Date(item.added_at * 1000).toLocaleDateString()
+        : '—';
+      const fileSize = item.file_size
+        ? formatBytes(Number(item.file_size))
+        : '—';
+      const hasFile = item.file_size && Number(item.file_size) > 0;
+
+      const osr = overseerrInfo ? overseerrInfo[rk] : null;
+      let reqByHtml = '<span class="cell-loading">loading...</span>';
+      if (overseerrInfo) {
+        reqByHtml = (osr && osr.requested_by) ? esc(osr.requested_by) : '<span class="dim">—</span>';
+      }
+
+      return `<tr class="${selClass}" data-rk="${rk}">
+        <td class="check-col"><input type="checkbox" class="row-check" data-rk="${rk}" data-title="${esc(item.title)}" data-year="${item.year || ''}" ${isChecked} /></td>
+        <td class="title-cell">${esc(item.title)}<span class="year">${item.year ? '(' + item.year + ')' : ''}</span></td>
+        <td class="dim">${item.year || '—'}</td>
+        <td class="dim">${addedAt}</td>
+        <td class="dim">${lastPlayed}</td>
+        <td class="dim">${item.play_count || 0}</td>
+        <td>${hasFile ? '<span class="badge badge-file">On Disk</span>' : '<span class="badge badge-nofile">Missing</span>'}</td>
+        <td class="dim">${fileSize}</td>
+        <td class="dim">${reqByHtml}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function loadMedia() {
+    if (!currentLib) return;
+    const body = $('#mediaBody');
+    body.innerHTML = '<tr><td colspan="9"><div class="table-loading"><span class="spinner"></span> Loading...</div></td></tr>';
+    try {
+      const search = $('#searchInput').value.trim();
+      let url = `/api/library/${currentLib}?length=${PAGE_SIZE}&start=${page * PAGE_SIZE}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const items = data.data || [];
+      totalCount = data.recordsFiltered || data.recordsTotal || items.length;
+
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><p>No items found.</p></div></td></tr>';
+        $('#paginationBar').style.display = 'none';
+        return;
+      }
+
+      renderTable(items, null);
+
+      const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+      $('#pageInfo').textContent = `Page ${page + 1} of ${totalPages} (${totalCount} items)`;
+      $('#prevBtn').disabled = page === 0;
+      $('#nextBtn').disabled = page + 1 >= totalPages;
+      $('#paginationBar').style.display = 'flex';
+
+      updateSelectionBar();
+
+      // Fetch Overseerr requestor info then re-render
+      const ratingKeys = items.map(i => String(i.rating_key));
+      try {
+        const osrRes = await fetch('/api/overseerr-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating_keys: ratingKeys,
+            media_type: currentLibType || 'movie',
+          }),
+        });
+        const osrInfo = await osrRes.json();
+        renderTable(items, osrInfo);
+        updateSelectionBar();
+      } catch {
+        renderTable(items, {});
+      }
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="9"><div class="empty-state"><p>Error: ${esc(e.message)}</p></div></td></tr>`;
+      toast('Failed to load media: ' + e.message, 'error');
+    }
+  }
+
+  // --- Selection ---
+  function updateSelectionBar() {
+    const bar = $('#selectionBar');
+    const n = selected.size;
+    if (n > 0) {
+      bar.classList.add('visible');
+      $('#selCount').textContent = n;
+    } else {
+      bar.classList.remove('visible');
+    }
+    $('#checkAll').checked = false;
+  }
+
+  // --- Remove flow ---
+  async function removeSelected() {
+    const list = $('#confirmList');
+    list.innerHTML = '';
+    for (const [rk, info] of selected) {
+      const li = document.createElement('li');
+      li.textContent = `${info.title}${info.year ? ' (' + info.year + ')' : ''}`;
+      list.appendChild(li);
+    }
+    $('#confirmModal').classList.add('visible');
+  }
+
+  async function confirmRemove() {
+    const btn = $('#confirmBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Removing...';
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const [rk, info] of selected) {
+      try {
+        const res = await fetch('/api/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating_key: rk,
+            section_id: currentLib,
+            media_type: currentLibType,
+          }),
+        });
+        const data = await res.json();
+        if (data.error) {
+          toast(`Failed: ${info.title} — ${data.error}`, 'error');
+          failCount++;
+        } else {
+          const parts = [];
+          for (const [k, v] of Object.entries(data)) {
+            if (typeof v === 'string' && v.startsWith('removed')) parts.push(k);
+          }
+          if (parts.length) {
+            const labels = parts.map(p => {
+              if (p === 'overseerr') return 'Overseerr';
+              if (p === 'tautulli') return 'Tautulli';
+              if (p.startsWith('radarr_')) return p.replace('radarr_', 'Radarr ');
+              if (p.startsWith('sonarr_')) return p.replace('sonarr_', 'Sonarr ');
+              return p;
+            });
+            toast(`Removed "${info.title}" from ${labels.join(' & ')}`, 'success');
+          } else {
+            const summary = Object.entries(data).map(([k,v]) => `${k}: ${v}`).join(', ');
+            toast(`"${info.title}" — ${summary}`, 'info');
+          }
+          selected.delete(rk);
+          successCount++;
+        }
+      } catch (e) {
+        toast(`Error removing "${info.title}": ${e.message}`, 'error');
+        failCount++;
+      }
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Remove';
+    $('#confirmModal').classList.remove('visible');
+    updateSelectionBar();
+
+    if (successCount > 0) loadMedia();
+  }
+
+  // --- Helpers ---
+  function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  // --- Events ---
+  $('#librarySelect').addEventListener('change', function() {
+    currentLib = this.value || null;
+    currentLibType = currentLib ? (libraryMap[currentLib] || 'movie') : null;
+    $('#loadBtn').disabled = !currentLib;
+  });
+
+  $('#loadBtn').addEventListener('click', () => {
+    page = 0;
+    selected.clear();
+    updateSelectionBar();
+    loadMedia();
+  });
+
+  $('#searchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && currentLib) {
+      page = 0;
+      loadMedia();
+    }
+  });
+
+  $('#prevBtn').addEventListener('click', () => { if (page > 0) { page--; loadMedia(); } });
+  $('#nextBtn').addEventListener('click', () => { page++; loadMedia(); });
+
+  document.addEventListener('change', (e) => {
+    if (e.target.classList.contains('row-check')) {
+      const rk = e.target.dataset.rk;
+      const row = e.target.closest('tr');
+      if (e.target.checked) {
+        selected.set(rk, {
+          title: e.target.dataset.title,
+          year: e.target.dataset.year,
+        });
+        row.classList.add('selected');
+      } else {
+        selected.delete(rk);
+        row.classList.remove('selected');
+      }
+      updateSelectionBar();
+    }
+  });
+
+  $('#checkAll').addEventListener('change', function() {
+    $$('.row-check').forEach(cb => {
+      cb.checked = this.checked;
+      const rk = cb.dataset.rk;
+      const row = cb.closest('tr');
+      if (this.checked) {
+        selected.set(rk, { title: cb.dataset.title, year: cb.dataset.year });
+        row.classList.add('selected');
+      } else {
+        selected.delete(rk);
+        row.classList.remove('selected');
+      }
+    });
+    updateSelectionBar();
+  });
+
+  $('#clearSelBtn').addEventListener('click', () => {
+    selected.clear();
+    $$('.row-check').forEach(cb => { cb.checked = false; cb.closest('tr').classList.remove('selected'); });
+    updateSelectionBar();
+  });
+
+  $('#removeBtn').addEventListener('click', removeSelected);
+  $('#cancelBtn').addEventListener('click', () => $('#confirmModal').classList.remove('visible'));
+  $('#confirmBtn').addEventListener('click', confirmRemove);
+
+  $('#confirmModal').addEventListener('click', (e) => {
+    if (e.target === $('#confirmModal')) $('#confirmModal').classList.remove('visible');
+  });
+
+  // Init
+  (async () => {
+    await initStatusBar();
+    checkStatus();
+    loadLibraries();
+  })();
+})();
+</script>
+</body>
+</html>
