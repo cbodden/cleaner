@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.0] - 2026-02-15
+
+### Added
+
+- **Multi-arch Docker** — GitHub Actions builds and pushes `linux/amd64` and `linux/arm64` images (RPi-friendly).
+- **Unit tests** — Pytest suite for app routes and ID extraction; CI runs tests before building the image.
+
 ## [1.3.0] - 2026-02-15
 
 ### Added
@@ -60,6 +67,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Missing Plex metadata no longer blocks removal; Tautulli history and cache are still cleaned when Plex metadata is unavailable.
 
+[1.4.0]: https://github.com/cbodden/cleaner/releases/tag/v1.4.0
 [1.3.0]: https://github.com/cbodden/cleaner/releases/tag/v1.3.0
 [1.2.0]: https://github.com/cbodden/cleaner/releases/tag/v1.2.0
 [1.1.0]: https://github.com/cbodden/cleaner/releases/tag/v1.1.0
