@@ -1,22 +1,18 @@
-import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import requests
-from flask import Flask, jsonify, render_template, request
-from dotenv import load_dotenv
+"""Media Cleaner — Flask application factory."""
+import config  # noqa: F401 — load .env before other imports
 
-load_dotenv()
+from flask import Flask
 
-app = Flask(__name__)
+from routes.api import api_bp
+from routes.main import main_bp
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 
-TAUTULLI_URL = os.getenv("TAUTULLI_URL", "http://localhost:8181").rstrip("/")
-TAUTULLI_API_KEY = os.getenv("TAUTULLI_API_KEY", "")
+def create_app() -> Flask:
+    app = Flask(__name__)
+    app.register_blueprint(main_bp)
+    app.register_blueprint(api_bp)
+    return app
 
-OVERSEERR_URL = os.getenv("OVERSEERR_URL", "http://localhost:5055").rstrip("/")
-OVERSEERR_API_KEY = os.getenv("OVERSEERR_API_KEY", "")
 
 
 def _build_arr_instances(prefix, count=2):

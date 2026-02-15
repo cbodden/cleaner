@@ -14,8 +14,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app.py .
+COPY app.py config.py ./
 COPY templates/ templates/
+COPY utils/ utils/
+COPY services/ services/
+COPY routes/ routes/
 
 EXPOSE 5000
 
