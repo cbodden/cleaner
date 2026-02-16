@@ -224,82 +224,123 @@ def api_instances():
 
 @api_bp.route("/libraries")
 def api_libraries():
-    """Return all Tautulli libraries."""
+    """Return all Tautulli libraries (for combined view we only need types)."""
     try:
         libs = tautulli.get_tautulli_libraries()
-        return jsonify(libs)
+        return jsonify(libs if isinstance(libs, list) else [])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@api_bp.route("/library/<section_id>")
-def api_library_media(section_id):
-    """Return media items for a library section.
-
-    When search is provided, results are filtered by title/sort_title or requested_by
-    (within the first SEARCH_FETCH_SIZE items by sort order).
+@api_bp.route("/library/combined")
+def api_library_combined():
+    """Return media from all libraries of one type (movie/show/artist), merged and sorted.
+    Each item includes library_name (Tautulli section_name) and section_id for remove flow.
     """
+    section_type = (request.args.get("type") or "movie").lower()
+    if section_type not in ("movie", "show", "artist"):
+        return jsonify({"error": "type must be movie, show, or artist"}), 400
     length = request.args.get("length", 50, type=int)
     start = request.args.get("start", 0, type=int)
-    search = request.args.get("search", None)
-    search = search.strip() if search else None
+    search = request.args.get("search", "").strip() or None
+    library_name_filter = request.args.get("library_name", "").strip() or None
     order_column = request.args.get("order_column", "last_played")
     order_dir = request.args.get("order_dir", "asc")
-    allowed_columns = {
-        "sort_title",
-        "year",
-        "added_at",
-        "last_played",
-        "play_count",
-        "file_size",
-    }
+    allowed_columns = {"sort_title", "year", "added_at", "last_played", "play_count", "file_size", "library_name"}
     if order_column not in allowed_columns:
         order_column = "last_played"
     if order_dir not in ("asc", "desc"):
         order_dir = "asc"
     try:
-        section_type = None
-        try:
-            libs = tautulli.get_tautulli_libraries()
-            for lib in (libs or []):
-                if str(lib.get("section_id")) == str(section_id):
-                    section_type = (lib.get("section_type") or "").lower()
-                    break
-        except Exception:
-            pass
+        libs = tautulli.get_tautulli_libraries()
+        if not isinstance(libs, list):
+            libs = []
+        # Only libraries of this type
+        libs_of_type = [l for l in libs if (l.get("section_type") or "").lower() == section_type]
+        if not libs_of_type:
+            return jsonify({
+                "data": [],
+                "recordsFiltered": 0,
+                "recordsTotal": 0,
+                "section_type": section_type,
+            })
 
-        # Title search via Tautulli; "Requested by" filter is done client-side on current page
-        data = tautulli.get_library_media(
-            section_id,
-            length=length,
-            start=start,
-            search=search,
-            order_column=order_column,
-            order_dir=order_dir,
-            section_type=section_type or None,
-        )
+        fetch_per_lib = max(length + start, 50)
+        all_items = []
+        for lib in libs_of_type:
+            sid = lib.get("section_id")
+            sname = (lib.get("section_name") or "").strip() or "—"
+            try:
+                data = tautulli.get_library_media(
+                    sid,
+                    length=fetch_per_lib,
+                    start=0,
+                    search=search,
+                    order_column=order_column,
+                    order_dir=order_dir,
+                    section_type=section_type,
+                )
+                items = data.get("data") if isinstance(data.get("data"), list) else []
+                for item in items:
+                    if isinstance(item, dict):
+                        item = dict(item)
+                        item["library_name"] = sname
+                        item["section_id"] = str(sid)
+                        all_items.append(item)
+            except Exception:
+                continue
 
-        # Normalize file size for show libraries (Tautulli may use different keys)
-        if section_type == "show" and isinstance(data.get("data"), list):
-            for item in data["data"]:
+        if library_name_filter:
+            want = library_name_filter.strip().lower()
+            all_items = [i for i in all_items if (i.get("library_name") or "").strip().lower() == want]
+
+        # Sort merged list (Tautulli may return timestamps/counts as strings)
+        def sort_key(i):
+            val = i.get(order_column)
+            if order_column == "library_name":
+                return (1, (str(val) or "").strip().lower())
+            if val is None or val == "":
+                return (0, 0) if order_column in ("last_played", "added_at", "play_count", "file_size") else (1, "")
+            if order_column in ("last_played", "added_at", "play_count", "file_size"):
+                try:
+                    n = int(val) if not isinstance(val, (int, float)) else val
+                    return (0, n)
+                except (TypeError, ValueError):
+                    return (1, str(val))
+            return (1, (str(val) or "").lower())
+
+        reverse = order_dir == "desc"
+        all_items.sort(key=sort_key, reverse=reverse)
+        total = len(all_items)
+        page_items = all_items[start : start + length]
+
+        # File size normalization for shows
+        if section_type == "show":
+            for item in page_items:
                 if isinstance(item, dict):
-                    fs = item.get("file_size")
-                    tfs = item.get("total_file_size")
+                    fs, tfs = item.get("file_size"), item.get("total_file_size")
                     if (fs is None or fs == 0 or fs == "") and tfs is not None:
                         item["file_size"] = tfs
-                    # Fallback: use any size-like key with a positive value
                     if (item.get("file_size") or 0) == 0:
                         for key in ("total_file_size", "size", "total_size"):
-                            val = item.get(key)
-                            if val is not None and val != "":
+                            v = item.get(key)
+                            if v is not None and v != "":
                                 try:
-                                    n = int(val) if isinstance(val, str) else val
+                                    n = int(v) if isinstance(v, str) else v
                                     if n > 0:
                                         item["file_size"] = n
                                         break
                                 except (TypeError, ValueError):
                                     pass
-        return jsonify(data)
+
+        out = {
+            "data": page_items,
+            "recordsFiltered": total,
+            "recordsTotal": total,
+            "section_type": section_type,
+            "libraries": [l.get("section_name") or "" for l in libs_of_type],
+        }
+        return jsonify(out)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -316,7 +357,10 @@ def api_overseerr_info():
 
     Returns a dict keyed by rating_key with requestor info.
     """
-    body = request.get_json(force=True)
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+    except Exception:
+        return jsonify({"error": "Invalid JSON body"}), 400
     rating_keys = body.get("rating_keys", [])
     media_type = body.get("media_type", "movie")
 
@@ -358,14 +402,16 @@ def api_overseerr_info():
             pass
         return result
 
-    info = {}
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = {pool.submit(_lookup, rk): rk for rk in rating_keys}
-        for fut in as_completed(futures):
-            res = fut.result()
-            info[res["rating_key"]] = res
-
-    return jsonify(info)
+    try:
+        info = {}
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {pool.submit(_lookup, rk): rk for rk in rating_keys}
+            for fut in as_completed(futures):
+                res = fut.result()
+                info[res["rating_key"]] = res
+        return jsonify(info)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/remove", methods=["POST"])

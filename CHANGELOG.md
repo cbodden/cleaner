@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.0] - 2026-02-15
+
+### Added
+
+- **Combined view by type** — Single dropdown: Movies, TV Shows, or Music; one merged list from all Tautulli libraries of that type.
+- **Library column** — Table shows which Tautulli library each item belongs to; column is sortable.
+- **Filter by library** — When a type is loaded, a "Filter by library" dropdown limits the list to one Tautulli library.
+
+### Changed
+
+- **Table layout** — Variable-width table with wrapping and horizontal scroll so columns are readable.
+- **Error handling** — API client handles non-JSON (e.g. HTML) responses without crashing; non-API 404s (e.g. favicon) no longer surface as 500.
+
+### Removed
+
+- **Library-by-name env** — Per-instance `*_LIBRARY_NAME` mapping removed; removal runs against all configured *arr instances.
+
 ## [1.4.0] - 2026-02-15
 
 ### Added
@@ -67,6 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Missing Plex metadata no longer blocks removal; Tautulli history and cache are still cleaned when Plex metadata is unavailable.
 
+[1.5.0]: https://github.com/cbodden/cleaner/releases/tag/v1.5.0
 [1.4.0]: https://github.com/cbodden/cleaner/releases/tag/v1.4.0
 [1.3.0]: https://github.com/cbodden/cleaner/releases/tag/v1.3.0
 [1.2.0]: https://github.com/cbodden/cleaner/releases/tag/v1.2.0

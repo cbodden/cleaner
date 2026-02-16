@@ -1,6 +1,6 @@
 # Media Cleaner
 
-**Version 1.4.0** — A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Seerr**, **Radarr**, **Sonarr**, **Lidarr**, and **Tautulli** in one click.
+**Version 1.5.0** — A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Seerr**, **Radarr**, **Sonarr**, **Lidarr**, and **Tautulli** in one click.
 
 ## Screenshot
 
@@ -94,8 +94,9 @@ Open **http://localhost:5000** in your browser.
 
 ## Usage
 
-1. Select a library from the dropdown and click **Load**
-2. Items are sorted by last played (oldest first) — stale content floats to the top
+1. Select a type (**Movies**, **TV Shows**, or **Music**) and click **Load**
+2. Optionally use **Filter by library** to show only one Tautulli library
+3. Items are sorted by last played (oldest first) — stale content floats to the top
 3. The **Requested By** column shows who originally requested the item in Seerr
 4. Check the items you want to remove
 5. Click **Remove Selected**, confirm, and the app handles the rest

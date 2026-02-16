@@ -13,7 +13,7 @@ def _bool_env(name: str, default: bool = False) -> bool:
 DEBUG = _bool_env("DEBUG", False)
 STAT = _bool_env("STAT", True)
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 GITHUB_REPO = "https://github.com/cbodden/cleaner"
 
 
@@ -21,7 +21,7 @@ def _build_arr_instances(prefix: str, count: int = 2) -> list[dict]:
     """Read numbered *arr instance configs from env vars.
 
     E.g. prefix="RADARR" reads RADARR_1_URL, RADARR_1_API_KEY, RADARR_1_NAME,
-    then RADARR_2_URL, etc.  Instances with a blank URL are skipped.
+    then RADARR_2_*, etc.  Instances with a blank URL are skipped.
     """
     instances = []
     for i in range(1, count + 1):

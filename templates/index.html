@@ -82,6 +82,11 @@
 
   select { min-width: 200px; cursor: pointer; }
   input[type="text"] { min-width: 220px; }
+  .filter-label {
+    font-size: 0.875rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
 
   button {
     cursor: pointer;
@@ -138,17 +143,20 @@
   }
   .selection-bar .count strong { color: var(--text); }
 
-  /* Table */
+  /* Table — variable width, wrap text so table fits; scroll horizontally when needed */
   .table-wrap {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: visible;
   }
 
   table {
     width: 100%;
+    min-width: 600px;
     border-collapse: collapse;
+    table-layout: auto;
   }
 
   thead th {
@@ -165,7 +173,7 @@
     white-space: nowrap;
   }
 
-  thead th.check-col { width: 40px; text-align: center; }
+  thead th.check-col { width: 40px; min-width: 40px; text-align: center; }
 
   thead th.sortable {
     cursor: pointer;
@@ -206,14 +214,17 @@
     padding: 0.65rem 1rem;
     font-size: 0.875rem;
     vertical-align: middle;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
   }
 
   td.check-col { text-align: center; }
+  td.cell-nowrap { white-space: nowrap; }
 
   td.title-cell {
     white-space: normal;
-    max-width: 350px;
+    min-width: 100px;
+    max-width: 400px;
     font-weight: 500;
   }
 
@@ -224,6 +235,9 @@
   }
 
   td.dim { color: var(--text-dim); }
+
+  td.cell-library,
+  td.cell-requested { min-width: 80px; max-width: 180px; }
 
   input[type="checkbox"] {
     width: 16px;
@@ -471,8 +485,17 @@
   <!-- Toolbar -->
   <div class="toolbar">
     <select id="librarySelect">
-      <option value="">Select a library...</option>
+      <option value="">Select type...</option>
+      <option value="combined:movie">Movies</option>
+      <option value="combined:show">TV Shows</option>
+      <option value="combined:artist">Music</option>
     </select>
+    <div class="search-wrap" id="libraryFilterWrap" style="display:none;">
+      <label for="libraryFilter" class="filter-label">Filter by library:</label>
+      <select id="libraryFilter">
+        <option value="">All libraries</option>
+      </select>
+    </div>
     <div class="search-wrap" id="searchWrap" style="display:none;">
       <input type="text" id="searchInput" placeholder="Search titles..." />
     </div>
@@ -504,13 +527,14 @@
           <th class="sortable" data-sort="play_count">Play Count</th>
           <th>File</th>
           <th class="sortable" data-sort="file_size">Size</th>
+          <th class="sortable" data-sort="library_name">Library</th>
           <th class="sortable" data-sort="requested_by">Requested By</th>
         </tr>
       </thead>
       <tbody id="mediaBody">
         <tr>
-          <td colspan="9">
-            <div class="empty-state"><p>Select a library and click Load to get started.</p></div>
+          <td colspan="10">
+            <div class="empty-state"><p>Select a type (Movies, TV Shows, or Music) and click Load.</p></div>
           </td>
         </tr>
       </tbody>
@@ -553,7 +577,6 @@
   const PAGE_SIZE = 50;
   let currentLib = null;
   let currentLibType = null;
-  let libraryMap = {};
   let page = 0;
   let totalCount = 0;
   let selected = new Map();
@@ -567,6 +590,20 @@
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
+
+  // Parse response as JSON; if server returned HTML (error page), throw a clear error.
+  async function parseJsonResponse(res) {
+    const text = await res.text();
+    const trimmed = text.trim();
+    if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+      throw new Error('Server returned an error page instead of JSON. Try again or check the server logs.');
+    }
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error('Invalid JSON from server: ' + (e.message || String(e)));
+    }
+  }
 
   // --- Toast ---
   function toast(msg, type = 'info') {
@@ -586,7 +623,7 @@
     ];
     try {
       const res = await fetch('/api/instances');
-      const inst = await res.json();
+      const inst = await parseJsonResponse(res);
       for (const r of (inst.radarr || [])) chips.push({ key: r.key, label: r.name });
       for (const s of (inst.sonarr || [])) chips.push({ key: s.key, label: s.name });
       for (const l of (inst.lidarr || [])) chips.push({ key: l.key, label: l.name });
@@ -601,7 +638,7 @@
   async function checkStatus() {
     try {
       const res = await fetch('/api/status');
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       for (const key of statusKeys) {
         const chip = $(`#st-${key}`);
         if (!chip) continue;
@@ -639,32 +676,10 @@
     }
   }
 
-  // --- Libraries ---
-  async function loadLibraries() {
-    try {
-      const res = await fetch('/api/libraries');
-      if (!res.ok) {
-        const text = await res.text();
-        let msg;
-        try { msg = JSON.parse(text).error; } catch { msg = `HTTP ${res.status}`; }
-        throw new Error(msg);
-      }
-      const libs = await res.json();
-      if (libs.error) throw new Error(libs.error);
-      const sel = $('#librarySelect');
-      libs.forEach(lib => {
-        libraryMap[lib.section_id] = lib.section_type;
-        const opt = document.createElement('option');
-        opt.value = lib.section_id;
-        opt.textContent = `${lib.section_name} (${lib.section_type})`;
-        sel.appendChild(opt);
-      });
-      if (libs.length === 0) {
-        toast('No libraries returned from Tautulli — check your API key.', 'error');
-      }
-    } catch (e) {
-      toast('Failed to load libraries: ' + e.message, 'error');
-    }
+  // --- Libraries: dropdown is static (Movies / TV Shows / Music) ---
+  function loadLibraries() {
+    // Options are in HTML; just ensure load btn state
+    $('#loadBtn').disabled = !$('#librarySelect').value;
   }
 
   // --- Media ---
@@ -702,17 +717,20 @@
       } else {
         reqByHtml = '<span class="cell-loading">loading...</span>';
       }
+      const libraryName = item.library_name != null ? esc(item.library_name) : '—';
+      const sectionId = item.section_id != null ? esc(String(item.section_id)) : '';
 
-      return `<tr class="${selClass}" data-rk="${rk}">
+      return `<tr class="${selClass}" data-rk="${rk}" data-section-id="${sectionId}">
         <td class="check-col"><input type="checkbox" class="row-check" data-rk="${rk}" data-title="${esc(item.title)}" data-year="${item.year || ''}" ${isChecked} /></td>
         <td class="title-cell">${esc(item.title)}<span class="year">${item.year ? '(' + item.year + ')' : ''}</span></td>
-        <td class="dim">${item.year || '—'}</td>
-        <td class="dim">${addedAt}</td>
-        <td class="dim">${lastPlayed}</td>
-        <td class="dim">${item.play_count || 0}</td>
-        <td>${fileBadge}</td>
-        <td class="dim">${fileSize}</td>
-        <td class="dim">${reqByHtml}</td>
+        <td class="dim cell-nowrap">${item.year || '—'}</td>
+        <td class="dim cell-nowrap">${addedAt}</td>
+        <td class="dim cell-nowrap">${lastPlayed}</td>
+        <td class="dim cell-nowrap">${item.play_count || 0}</td>
+        <td class="cell-nowrap">${fileBadge}</td>
+        <td class="dim cell-nowrap">${fileSize}</td>
+        <td class="dim cell-library">${libraryName}</td>
+        <td class="dim cell-requested">${reqByHtml}</td>
       </tr>`;
     }).join('');
   }
@@ -739,25 +757,50 @@
   async function loadMedia() {
     if (!currentLib) return;
     const body = $('#mediaBody');
-    body.innerHTML = '<tr><td colspan="9"><div class="table-loading"><span class="spinner"></span> Loading...</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="10"><div class="table-loading"><span class="spinner"></span> Loading...</div></td></tr>';
     try {
       const search = $('#searchInput').value.trim();
       const requestorSearch = $('#requestorSearchInput').value.trim();
       const isClientSort = sortColumn === 'requested_by';
       const apiSortCol = isClientSort ? 'last_played' : sortColumn;
       const apiSortDir = isClientSort ? 'asc' : sortDir;
-      let url = `/api/library/${currentLib}?length=${PAGE_SIZE}&start=${page * PAGE_SIZE}&order_column=${apiSortCol}&order_dir=${apiSortDir}`;
-      if (search) url += `&search=${encodeURIComponent(search)}`;
-      // Requested by is filtered client-side from current page (no requestor_search to avoid timeout)
+      const isCombined = currentLib.startsWith('combined:');
+      const typeParam = isCombined ? currentLib.replace('combined:', '') : '';
+      const libraryFilter = $('#libraryFilter').value.trim();
+      let url;
+      if (isCombined) {
+        url = `/api/library/combined?type=${encodeURIComponent(typeParam)}&length=${PAGE_SIZE}&start=${page * PAGE_SIZE}&order_column=${apiSortCol}&order_dir=${apiSortDir}`;
+        if (libraryFilter) url += `&library_name=${encodeURIComponent(libraryFilter)}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+      } else {
+        url = `/api/library/${currentLib}?length=${PAGE_SIZE}&start=${page * PAGE_SIZE}&order_column=${apiSortCol}&order_dir=${apiSortDir}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+      }
       const res = await fetch(url);
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       if (data.error) throw new Error(data.error);
 
       const items = data.data || [];
-      totalCount = data.recordsFiltered || data.recordsTotal || items.length;
+      totalCount = data.recordsFiltered != null ? data.recordsFiltered : (data.recordsTotal != null ? data.recordsTotal : items.length);
+      if (data.section_type) currentLibType = data.section_type;
+
+      if (isCombined && data.libraries && Array.isArray(data.libraries)) {
+        const filterSel = $('#libraryFilter');
+        const currentVal = filterSel.value;
+        filterSel.innerHTML = '<option value="">All libraries</option>' +
+          data.libraries.map(l => {
+            const safe = (l || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            return `<option value="${safe}">${esc(l)}</option>`;
+          }).join('');
+        if (currentVal && data.libraries.some(l => (l || '').trim() === currentVal)) filterSel.value = currentVal;
+        $('#libraryFilterWrap').style.display = '';
+      } else {
+        $('#libraryFilterWrap').style.display = 'none';
+      }
 
       if (!items.length) {
-        body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><p>No items found.</p></div></td></tr>';
+        body.innerHTML = '<tr><td colspan="10"><div class="empty-state"><p>No items found.</p></div></td></tr>';
         $('#paginationBar').style.display = 'none';
         libraryLoaded = true;
         $('#searchWrap').style.display = '';
@@ -795,7 +838,7 @@
               media_type: currentLibType || 'movie',
             }),
           });
-          const osrInfo = await osrRes.json();
+          const osrInfo = await parseJsonResponse(osrRes);
           lastOsrInfo = osrInfo;
           let displayItems = isClientSort
             ? sortItemsByRequestedBy(items, osrInfo, sortDir)
@@ -820,7 +863,7 @@
         }
       }
     } catch (e) {
-      body.innerHTML = `<tr><td colspan="9"><div class="empty-state"><p>Error: ${esc(e.message)}</p></div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="10"><div class="empty-state"><p>Error: ${esc(e.message)}</p></div></td></tr>`;
       toast('Failed to load media: ' + e.message, 'error');
     }
   }
@@ -865,11 +908,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             rating_key: rk,
-            section_id: currentLib,
+            section_id: info.section_id != null ? info.section_id : currentLib,
             media_type: currentLibType,
           }),
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         if (data.error) {
           console.error('Remove failed:', info.title, data);
           toast(`Failed: ${info.title} — ${data.error}`, 'error');
@@ -939,13 +982,22 @@
   // --- Events ---
   $('#librarySelect').addEventListener('change', function() {
     currentLib = this.value || null;
-    currentLibType = currentLib ? (libraryMap[currentLib] || 'movie') : null;
+    currentLibType = currentLib && currentLib.startsWith('combined:') ? currentLib.replace('combined:', '') : (currentLib ? 'movie' : null);
     $('#loadBtn').disabled = !currentLib;
     libraryLoaded = false;
+    $('#libraryFilter').value = '';
+    $('#libraryFilterWrap').style.display = 'none';
     $('#searchWrap').style.display = 'none';
     $('#searchInput').value = '';
     $('#requestorSearchWrap').style.display = 'none';
     $('#requestorSearchInput').value = '';
+  });
+
+  $('#libraryFilter').addEventListener('change', function() {
+    if (libraryLoaded && currentLib) {
+      page = 0;
+      loadMedia();
+    }
   });
 
   $('#loadBtn').addEventListener('click', () => {
@@ -980,10 +1032,12 @@
     if (e.target.classList.contains('row-check')) {
       const rk = e.target.dataset.rk;
       const row = e.target.closest('tr');
+      const sectionId = row && row.dataset.sectionId !== undefined ? row.dataset.sectionId : currentLib;
       if (e.target.checked) {
         selected.set(rk, {
           title: e.target.dataset.title,
           year: e.target.dataset.year,
+          section_id: sectionId || currentLib,
         });
         row.classList.add('selected');
       } else {
@@ -999,8 +1053,9 @@
       cb.checked = this.checked;
       const rk = cb.dataset.rk;
       const row = cb.closest('tr');
+      const sectionId = row && row.dataset.sectionId !== undefined ? row.dataset.sectionId : currentLib;
       if (this.checked) {
-        selected.set(rk, { title: cb.dataset.title, year: cb.dataset.year });
+        selected.set(rk, { title: cb.dataset.title, year: cb.dataset.year, section_id: sectionId || currentLib });
         row.classList.add('selected');
       } else {
         selected.delete(rk);

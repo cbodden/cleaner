@@ -1,3 +1,4 @@
+# Media Cleaner — see README for setup. Image tag: latest (master) or dev (dev branch).
 services:
   cleaner:
     image: ghcr.io/cbodden/cleaner
