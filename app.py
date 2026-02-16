@@ -1,4 +1,4 @@
-"""Media Cleaner — Flask application factory."""
+"""Magic-Erasarr — Flask application factory."""
 import config  # noqa: F401 — load .env before other imports
 
 from flask import Flask, jsonify, request

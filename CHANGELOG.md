@@ -102,10 +102,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Missing Plex metadata no longer blocks removal; Tautulli history and cache are still cleaned when Plex metadata is unavailable.
 
-[1.6.0]: https://github.com/cbodden/cleaner/releases/tag/v1.6.0
-[1.5.0]: https://github.com/cbodden/cleaner/releases/tag/v1.5.0
-[1.4.0]: https://github.com/cbodden/cleaner/releases/tag/v1.4.0
-[1.3.0]: https://github.com/cbodden/cleaner/releases/tag/v1.3.0
-[1.2.0]: https://github.com/cbodden/cleaner/releases/tag/v1.2.0
-[1.1.0]: https://github.com/cbodden/cleaner/releases/tag/v1.1.0
-[1.0.0]: https://github.com/cbodden/cleaner/releases/tag/v1.0.0
+[1.6.0]: https://github.com/cbodden/Magic-Erasarr/releases/tag/v1.6.0
+[1.5.0]: https://github.com/cbodden/Magic-Erasarr/releases/tag/v1.5.0
+[1.4.0]: https://github.com/cbodden/Magic-Erasarr/releases/tag/v1.4.0
+[1.3.0]: https://github.com/cbodden/Magic-Erasarr/releases/tag/v1.3.0
+[1.2.0]: https://github.com/cbodden/Magic-Erasarr/releases/tag/v1.2.0
+[1.1.0]: https://github.com/cbodden/Magic-Erasarr/releases/tag/v1.1.0
+[1.0.0]: https://github.com/cbodden/Magic-Erasarr/releases/tag/v1.0.0

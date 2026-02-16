@@ -1,4 +1,4 @@
-# Media Cleaner
+# Magic-Erasarr
 
 **Version 1.6.0** — A web app that shows your Tautulli library sorted by last played and lets you bulk-remove items from **Seerr**, **Radarr**, **Sonarr**, and **Lidarr** in one click. After removal, the app can trigger a **Plex** library refresh and a **Tautulli** media info refresh so changes appear in both.
 
@@ -35,7 +35,7 @@ Items whose Plex metadata can no longer be resolved (e.g. removed from Plex but 
 ## Setup
 
 ```bash
-cd cleaner
+cd Magic-Erasarr
 
 python3 -m venv venv
 source venv/bin/activate

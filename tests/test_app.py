@@ -6,7 +6,7 @@ def test_index_returns_200(client):
     """Index page loads."""
     r = client.get("/")
     assert r.status_code == 200
-    assert b"Media Cleaner" in r.data or b"media" in r.data.lower()
+    assert b"Magic-Erasarr" in r.data or b"media" in r.data.lower()
 
 
 def test_index_includes_version(client):
