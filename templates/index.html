@@ -371,6 +371,24 @@
   }
   .app-footer-link:hover { color: var(--text); }
 
+  /* Toast Overlay */
+  .toast-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .toast-overlay.active {
+    display: flex;
+  }
+
   /* Toast */
   .toast-container {
     position: fixed;
@@ -393,6 +411,20 @@
     max-width: 360px;
   }
 
+  /* Centered modal toast */
+  .toast-overlay .toast {
+    position: relative;
+    max-width: 600px;
+    width: 90%;
+    font-size: 1.25rem;
+    padding: 2rem;
+    text-align: center;
+    z-index: 1000;
+    animation: fadeInScale 0.3s ease-out;
+    line-height: 1.6;
+    white-space: normal;
+  }
+
   .toast.success { border-left: 3px solid var(--success); }
   .toast.error { border-left: 3px solid var(--danger); }
   .toast.info { border-left: 3px solid var(--accent); }
@@ -400,6 +432,23 @@
   @keyframes slideIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeInScale {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* Flashing red warning text */
+  .toast-warning-flash {
+    color: var(--danger);
+    font-weight: 600;
+    animation: flashRed 1s ease-in-out infinite;
+  }
+
+  @keyframes flashRed {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
   }
 
   /* Empty state */
@@ -470,6 +519,45 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
   }
+
+  /* Top alert banner (e.g. Tautulli calculating file sizes) */
+  .top-alert {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: rgba(245, 158, 11, 0.2);
+    border-bottom: 1px solid var(--warning);
+    color: var(--text);
+    font-size: 0.9375rem;
+    position: relative;
+    z-index: 200;
+  }
+
+  .top-alert.visible {
+    display: flex !important;
+  }
+
+  .top-alert-message {
+    flex: 1;
+  }
+
+  .top-alert-dismiss {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.8125rem;
+  }
+
+  .top-alert-dismiss:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
 </style>
 </head>
 <body>
@@ -477,6 +565,11 @@
 <header>
   <h1><span>Media</span> Cleaner</h1>
 </header>
+
+<div class="top-alert" id="topAlert">
+  <span class="top-alert-message">Tautulli is calculating file sizes for the library's media info. Some data may be missing or delayed until the calculation completes.</span>
+  <button type="button" class="top-alert-dismiss" id="topAlertDismiss">Dismiss</button>
+</div>
 
 <div class="container">
   <!-- Status chips (populated dynamically) -->
@@ -566,6 +659,7 @@
 
 <!-- Toasts -->
 <div class="toast-container" id="toasts"></div>
+<div class="toast-overlay" id="toastOverlay"></div>
 
 <footer class="app-footer">
   <span class="app-footer-version">v{{ version }}</span>
@@ -719,9 +813,10 @@
       }
       const libraryName = item.library_name != null ? esc(item.library_name) : '—';
       const sectionId = item.section_id != null ? esc(String(item.section_id)) : '';
+      const itemGuid = (item.guid != null && item.guid !== '') ? String(item.guid) : '';
 
-      return `<tr class="${selClass}" data-rk="${rk}" data-section-id="${sectionId}">
-        <td class="check-col"><input type="checkbox" class="row-check" data-rk="${rk}" data-title="${esc(item.title)}" data-year="${item.year || ''}" ${isChecked} /></td>
+      return `<tr class="${selClass}" data-rk="${rk}" data-section-id="${sectionId}" data-guid="${esc(itemGuid)}">
+        <td class="check-col"><input type="checkbox" class="row-check" data-rk="${rk}" data-title="${esc(item.title)}" data-year="${item.year || ''}" data-guid="${esc(itemGuid)}" ${isChecked} /></td>
         <td class="title-cell">${esc(item.title)}<span class="year">${item.year ? '(' + item.year + ')' : ''}</span></td>
         <td class="dim cell-nowrap">${item.year || '—'}</td>
         <td class="dim cell-nowrap">${addedAt}</td>
@@ -772,6 +867,8 @@
         url = `/api/library/combined?type=${encodeURIComponent(typeParam)}&length=${PAGE_SIZE}&start=${page * PAGE_SIZE}&order_column=${apiSortCol}&order_dir=${apiSortDir}`;
         if (libraryFilter) url += `&library_name=${encodeURIComponent(libraryFilter)}`;
         if (search) url += `&search=${encodeURIComponent(search)}`;
+        // Optional: ?test_calculating=1 in page URL forces the "calculating file sizes" banner for testing
+        if (new URLSearchParams(window.location.search).get('test_calculating') === '1') url += '&show_calculating_alert=1';
       } else {
         url = `/api/library/${currentLib}?length=${PAGE_SIZE}&start=${page * PAGE_SIZE}&order_column=${apiSortCol}&order_dir=${apiSortDir}`;
         if (search) url += `&search=${encodeURIComponent(search)}`;
@@ -784,6 +881,16 @@
       const items = data.data || [];
       totalCount = data.recordsFiltered != null ? data.recordsFiltered : (data.recordsTotal != null ? data.recordsTotal : items.length);
       if (data.section_type) currentLibType = data.section_type;
+
+      // Show or hide top alert when Tautulli is calculating file sizes
+      const topAlert = document.getElementById('topAlert');
+      if (topAlert) {
+        if (data.tautulli_calculating_file_sizes === true) {
+          topAlert.classList.add('visible');
+        } else {
+          topAlert.classList.remove('visible');
+        }
+      }
 
       if (isCombined && data.libraries && Array.isArray(data.libraries)) {
         const filterSel = $('#libraryFilter');
@@ -898,50 +1005,226 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Removing...';
 
+    const totalItems = selected.size;
     let successCount = 0;
     let failCount = 0;
+    const sectionsToRefresh = new Map(); // Map<section_id, section_type>
+    const removedServices = new Set();
 
+    // Create overlay and persistent toast that updates throughout the entire flow
+    const overlay = $('#toastOverlay');
+    overlay.classList.add('active');
+    const statusToastEl = document.createElement('div');
+    statusToastEl.className = 'toast info';
+    statusToastEl.textContent = `Removing ${totalItems} item${totalItems > 1 ? 's' : ''}...`;
+    overlay.appendChild(statusToastEl);
+
+    let processedCount = 0;
     for (const [rk, info] of selected) {
+      processedCount++;
+      statusToastEl.textContent = `Removing ${totalItems} item${totalItems > 1 ? 's' : ''}... (${processedCount}/${totalItems})`;
       try {
+        const payload = {
+          rating_key: rk,
+          section_id: info.section_id != null ? info.section_id : currentLib,
+          media_type: currentLibType,
+        };
+        if (info.guid) payload.guid = info.guid;
+        if (info.title) payload.title = info.title;
+        if (info.year != null && info.year !== '') payload.year = info.year;
+        else {
+          try {
+            const idRes = await fetch('/api/item-ids?rating_key=' + encodeURIComponent(rk));
+            const idData = await parseJsonResponse(idRes);
+            if (idData && !idData.error && idData.guid) payload.guid = idData.guid;
+            else if (idData && !idData.error) {
+              if (idData.tmdb_id) payload.tmdb_id = idData.tmdb_id;
+              if (idData.imdb_id) payload.imdb_id = idData.imdb_id;
+              if (idData.tvdb_id) payload.tvdb_id = idData.tvdb_id;
+              if (idData.mbid) payload.mbid = idData.mbid;
+            }
+          } catch (_) { /* keep payload as is */ }
+        }
         const res = await fetch('/api/remove', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rating_key: rk,
-            section_id: info.section_id != null ? info.section_id : currentLib,
-            media_type: currentLibType,
-          }),
+          body: JSON.stringify(payload),
         });
         const data = await parseJsonResponse(res);
         if (data.error) {
           console.error('Remove failed:', info.title, data);
-          toast(`Failed: ${info.title} — ${data.error}`, 'error');
           failCount++;
         } else {
           const parts = [];
+          let hasArrRemoval = false;
           for (const [k, v] of Object.entries(data)) {
-            if (typeof v === 'string' && v.startsWith('removed')) parts.push(k);
+            if (typeof v === 'string' && v.startsWith('removed')) {
+              parts.push(k);
+              removedServices.add(k);
+              // Check if this is an *arr removal (not Overseerr)
+              if (k.startsWith('radarr_') || k.startsWith('sonarr_') || k.startsWith('lidarr_')) {
+                hasArrRemoval = true;
+              }
+            }
+          }
+          // Track section_id and section_type for Plex/Tautulli refresh if any *arr deletion succeeded
+          const sectionId = data._section_id_for_refresh || (hasArrRemoval && payload.section_id ? payload.section_id : null);
+          if (sectionId) {
+            // Map media_type to section_type (they're the same: movie/show/artist)
+            const sectionType = payload.media_type || currentLibType;
+            sectionsToRefresh.set(sectionId, sectionType);
           }
           if (parts.length) {
-            const labels = parts.map(p => {
-              if (p === 'overseerr') return seerrDisplayName;
-              if (p === 'tautulli') return 'Tautulli';
-              if (p.startsWith('radarr_')) return p.replace('radarr_', 'Radarr ');
-              if (p.startsWith('sonarr_')) return p.replace('sonarr_', 'Sonarr ');
-              return p;
-            });
-            toast(`Removed "${info.title}" from ${labels.join(' & ')}`, 'success');
-          } else {
-            const summary = Object.entries(data).map(([k,v]) => `${k}: ${v}`).join(', ');
-            toast(`"${info.title}" — ${summary}`, 'info');
+            successCount++;
           }
           selected.delete(rk);
-          successCount++;
         }
       } catch (e) {
-        toast(`Error removing "${info.title}": ${e.message}`, 'error');
         failCount++;
+        console.error('Error removing:', info.title, e);
       }
+    }
+
+    // Update toast after all items processed
+    const serviceLabels = Array.from(removedServices).map(p => {
+      if (p === 'overseerr') return seerrDisplayName;
+      if (p.startsWith('radarr_')) return p.replace('radarr_', 'Radarr ');
+      if (p.startsWith('sonarr_')) return p.replace('sonarr_', 'Sonarr ');
+      if (p.startsWith('lidarr_')) return p.replace('lidarr_', 'Lidarr ');
+      return p;
+    });
+    const serviceSummary = serviceLabels.length > 0 ? ` from ${serviceLabels.join(' & ')}` : '';
+
+    if (failCount === 0 && successCount > 0) {
+      statusToastEl.className = 'toast success';
+      statusToastEl.textContent = `Removed ${successCount} item${successCount > 1 ? 's' : ''}${serviceSummary}`;
+    } else if (successCount > 0) {
+      statusToastEl.className = 'toast info';
+      statusToastEl.textContent = `Removed ${successCount} item${successCount > 1 ? 's' : ''}${serviceSummary}, ${failCount} failed`;
+    } else {
+      statusToastEl.className = 'toast error';
+      statusToastEl.textContent = `Failed to remove ${failCount} item${failCount > 1 ? 's' : ''}`;
+    }
+
+    // Refresh Plex libraries for sections that had successful *arr deletions
+    console.log('Sections to refresh:', Array.from(sectionsToRefresh.entries()), 'Removed services:', Array.from(removedServices));
+    if (sectionsToRefresh.size > 0) {
+      const sectionsArray = Array.from(sectionsToRefresh.entries()).map(([section_id, section_type]) => ({
+        section_id,
+        section_type
+      }));
+      
+      // Step 1: Refresh Plex libraries
+      const prevMsg = statusToastEl.textContent;
+      statusToastEl.className = 'toast info';
+      statusToastEl.textContent = `${prevMsg} Refreshing ${sectionsToRefresh.size} Plex library/libraries...`;
+      
+      try {
+        const refreshRes = await fetch('/api/refresh-plex', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ section_ids: sectionsArray.map(s => s.section_id) }),
+        });
+        const refreshData = await parseJsonResponse(refreshRes);
+        if (refreshData.refreshed && refreshData.refreshed.length > 0) {
+          const plexSuccessMsg = `${prevMsg} Refreshed ${refreshData.refreshed.length} Plex library/libraries`;
+          statusToastEl.textContent = plexSuccessMsg;
+          
+          // Step 2: Wait 20 seconds before refreshing Tautulli media info
+          let countdown = 20;
+          statusToastEl.textContent = `${plexSuccessMsg} Waiting ${countdown}s before refreshing Tautulli...`;
+          
+          const countdownInterval = setInterval(() => {
+            countdown--;
+            if (countdown > 0) {
+              statusToastEl.textContent = `${plexSuccessMsg} Waiting ${countdown}s before refreshing Tautulli...`;
+            } else {
+              clearInterval(countdownInterval);
+              statusToastEl.textContent = `${plexSuccessMsg} Refreshing Tautulli media info...`;
+              
+              // Trigger Tautulli refresh
+              fetch('/api/refresh-tautulli', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sections: sectionsArray }),
+              })
+                .then(res => parseJsonResponse(res))
+                .then(tautulliData => {
+                  if (tautulliData.refreshed && tautulliData.refreshed.length > 0) {
+                    // Check if any sections are TV shows
+                    const hasTVShows = sectionsArray.some(s => s.section_type === 'show');
+                    
+                    if (hasTVShows) {
+                      // Show warning for TV shows before reloading
+                      statusToastEl.className = 'toast success';
+                      const warningSpan = document.createElement('span');
+                      warningSpan.className = 'toast-warning-flash';
+                      warningSpan.textContent = ' ⚠️ WARNING: TV show removal may take several minutes to appear in Tautulli as it rescans the entire library and all episodes.';
+                      statusToastEl.innerHTML = `${prevMsg} Refreshed ${refreshData.refreshed.length} Plex library/libraries & Tautulli media info.`;
+                      statusToastEl.appendChild(document.createElement('br'));
+                      statusToastEl.appendChild(warningSpan);
+                      statusToastEl.appendChild(document.createElement('br'));
+                      const reloadSpan = document.createElement('span');
+                      reloadSpan.textContent = 'Reloading...';
+                      statusToastEl.appendChild(reloadSpan);
+                      
+                      // Reload page after showing warning for 5 seconds
+                      setTimeout(() => {
+                        overlay.classList.remove('active');
+                        window.location.reload();
+                      }, 5000);
+                    } else {
+                      statusToastEl.className = 'toast success';
+                      statusToastEl.textContent = `${prevMsg} Refreshed ${refreshData.refreshed.length} Plex library/libraries & Tautulli media info. Reloading...`;
+                      // Reload page to show updated library
+                      setTimeout(() => {
+                        overlay.classList.remove('active');
+                        window.location.reload();
+                      }, 1000);
+                    }
+                  } else {
+                    statusToastEl.className = 'toast info';
+                    statusToastEl.textContent = `${prevMsg} Refreshed ${refreshData.refreshed.length} Plex library/libraries (Tautulli refresh had errors)`;
+                    setTimeout(() => {
+                      overlay.classList.remove('active');
+                      statusToastEl.remove();
+                    }, 5000);
+                  }
+                })
+                .catch(e => {
+                  statusToastEl.className = 'toast info';
+                  statusToastEl.textContent = `${prevMsg} Refreshed ${refreshData.refreshed.length} Plex library/libraries (Tautulli refresh failed: ${e.message})`;
+                  setTimeout(() => {
+                    overlay.classList.remove('active');
+                    statusToastEl.remove();
+                  }, 5000);
+                  console.error('Tautulli refresh failed:', e);
+                });
+            }
+          }, 1000);
+        } else {
+          statusToastEl.className = 'toast error';
+          statusToastEl.textContent = `${prevMsg} Plex refresh completed with errors`;
+          setTimeout(() => {
+            overlay.classList.remove('active');
+            statusToastEl.remove();
+          }, 5000);
+        }
+      } catch (e) {
+        statusToastEl.className = 'toast error';
+        statusToastEl.textContent = `${prevMsg} Plex refresh failed: ${e.message}`;
+        setTimeout(() => {
+          overlay.classList.remove('active');
+          statusToastEl.remove();
+        }, 5000);
+        console.error('Plex refresh failed:', e);
+      }
+    } else {
+      // No Plex refresh needed, remove toast after a delay
+      setTimeout(() => {
+        overlay.classList.remove('active');
+        statusToastEl.remove();
+      }, 5000);
     }
 
     btn.disabled = false;
@@ -1033,11 +1316,13 @@
       const rk = e.target.dataset.rk;
       const row = e.target.closest('tr');
       const sectionId = row && row.dataset.sectionId !== undefined ? row.dataset.sectionId : currentLib;
+      const guid = (row && row.dataset.guid) || e.target.dataset.guid || '';
       if (e.target.checked) {
         selected.set(rk, {
           title: e.target.dataset.title,
           year: e.target.dataset.year,
           section_id: sectionId || currentLib,
+          guid: guid || undefined,
         });
         row.classList.add('selected');
       } else {
@@ -1054,8 +1339,9 @@
       const rk = cb.dataset.rk;
       const row = cb.closest('tr');
       const sectionId = row && row.dataset.sectionId !== undefined ? row.dataset.sectionId : currentLib;
+      const guid = (row && row.dataset.guid) || cb.dataset.guid || '';
       if (this.checked) {
-        selected.set(rk, { title: cb.dataset.title, year: cb.dataset.year, section_id: sectionId || currentLib });
+        selected.set(rk, { title: cb.dataset.title, year: cb.dataset.year, section_id: sectionId || currentLib, guid: guid || undefined });
         row.classList.add('selected');
       } else {
         selected.delete(rk);
@@ -1099,6 +1385,8 @@
   $('#removeBtn').addEventListener('click', removeSelected);
   $('#cancelBtn').addEventListener('click', () => $('#confirmModal').classList.remove('visible'));
   $('#confirmBtn').addEventListener('click', confirmRemove);
+
+  $('#topAlertDismiss').addEventListener('click', () => $('#topAlert').classList.remove('visible'));
 
   $('#confirmModal').addEventListener('click', (e) => {
     if (e.target === $('#confirmModal')) $('#confirmModal').classList.remove('visible');

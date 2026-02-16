@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.0] - 2026-02-16
+
+### Added
+
+- **Plex library refresh** — After removing items from Radarr/Sonarr/Lidarr, the app triggers a Plex library scan for affected sections (optional; `PLEX_URL` and `PLEX_TOKEN`).
+- **Tautulli media info refresh** — After Plex refresh, the app waits 20 seconds then triggers a Tautulli media info refresh so removed items disappear from Tautulli’s cache; the page reloads when done.
+- **Removal flow toast** — A single centered modal toast shows progress for the whole flow (removing items, Plex refresh, Tautulli refresh) with a dimmed page background.
+- **TV show warning** — When TV shows are removed, the toast shows a flashing warning that Tautulli may take several minutes to update (full library rescan).
+- **Tautulli “calculating file sizes” alert** — When Tautulli is calculating file sizes for a library, a yellow alert banner appears at the top. **Data shown may not be up to date** until calculation completes; file sizes and other fields can be missing or stale.
+- **Debug endpoint** — With `DEBUG=true`, `GET /api/debug/tautulli-raw-response?type=show` returns the raw Tautulli library response for troubleshooting.
+
+### Changed
+
+- **Remove flow** — No longer modifies Tautulli directly; removal is Seerr + *arrs, then Plex refresh, then Tautulli refresh. Tautulli updates after Plex scans.
+- **Library combined API** — Uses full Tautulli response to detect “calculating file sizes” (success response with `total_file_size`/`filtered_file_size` 0 and records present) and sets `tautulli_calculating_file_sizes` in the response so the frontend can show the banner.
+- **README** — Documents Plex token, removal flow, Tautulli calculating banner, and TV show refresh behavior. Version set to 1.6.0.
+- **Docker** — Dockerfile and docker-compose use version 1.6.0; docker-compose includes optional `PLEX_URL` and `PLEX_TOKEN`.
+
 ## [1.5.0] - 2026-02-15
 
 ### Added
@@ -84,6 +102,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Missing Plex metadata no longer blocks removal; Tautulli history and cache are still cleaned when Plex metadata is unavailable.
 
+[1.6.0]: https://github.com/cbodden/cleaner/releases/tag/v1.6.0
 [1.5.0]: https://github.com/cbodden/cleaner/releases/tag/v1.5.0
 [1.4.0]: https://github.com/cbodden/cleaner/releases/tag/v1.4.0
 [1.3.0]: https://github.com/cbodden/cleaner/releases/tag/v1.3.0

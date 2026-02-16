@@ -13,7 +13,7 @@ def _bool_env(name: str, default: bool = False) -> bool:
 DEBUG = _bool_env("DEBUG", False)
 STAT = _bool_env("STAT", True)
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 GITHUB_REPO = "https://github.com/cbodden/cleaner"
 
 
@@ -35,6 +35,10 @@ def _build_arr_instances(prefix: str, count: int = 2) -> list[dict]:
 
 TAUTULLI_URL = os.getenv("TAUTULLI_URL", "http://localhost:8181").rstrip("/")
 TAUTULLI_API_KEY = os.getenv("TAUTULLI_API_KEY", "")
+
+# Optional: Plex Media Server (to refresh library after Radarr deletes files)
+PLEX_URL = os.getenv("PLEX_URL", "").rstrip("/")
+PLEX_TOKEN = os.getenv("PLEX_TOKEN", "")
 
 OVERSEERR_URL = os.getenv("OVERSEERR_URL", "http://localhost:5055").rstrip("/")
 OVERSEERR_API_KEY = os.getenv("OVERSEERR_API_KEY", "")

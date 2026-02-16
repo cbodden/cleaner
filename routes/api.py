@@ -9,11 +9,13 @@ from config import (
     LIDARR_INSTANCES,
     OVERSEERR_API_KEY,
     OVERSEERR_URL,
+    PLEX_TOKEN,
+    PLEX_URL,
     RADARR_INSTANCES,
     SONARR_INSTANCES,
     STAT,
 )
-from services import lidarr, overseerr, radarr, sonarr, tautulli
+from services import lidarr, overseerr, plex as plex_svc, radarr, sonarr, tautulli
 from utils.ids import extract_ids
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -61,6 +63,41 @@ def api_debug():
             out[f"library_{sid}_error"] = str(e)
 
     return jsonify(out)
+
+
+@api_bp.route("/debug/tautulli-raw-response")
+def api_debug_tautulli_raw_response():
+    """Return the raw Tautulli get_library_media_info response for the first library of the given type.
+    Only when DEBUG=true. Call this while Tautulli is calculating file sizes to see the exact response.
+    Query params: type=movie|show|artist (default show).
+    """
+    if not DEBUG:
+        return jsonify({"error": "Debug routes are disabled"}), 404
+    section_type = (request.args.get("type") or "show").lower()
+    if section_type not in ("movie", "show", "artist"):
+        return jsonify({"error": "type must be movie, show, or artist"}), 400
+    try:
+        libs = tautulli.get_tautulli_libraries()
+        libs_of_type = [l for l in (libs or []) if (l.get("section_type") or "").lower() == section_type]
+        if not libs_of_type:
+            return jsonify({"error": f"No libraries of type {section_type}", "raw_response": None})
+        lib = libs_of_type[0]
+        sid = lib.get("section_id")
+        resp = tautulli.get_library_media_response(
+            sid, length=2, start=0, order_column="last_played", order_dir="asc", section_type=section_type
+        )
+        return jsonify({
+            "section_id": sid,
+            "section_name": lib.get("section_name"),
+            "section_type": section_type,
+            "raw_response": resp,
+            "result": resp.get("result"),
+            "message": resp.get("message"),
+            "data_keys": list(resp.get("data", {}).keys()) if isinstance(resp.get("data"), dict) else None,
+            "calculating_detected": tautulli.response_indicates_calculating_file_sizes(resp),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/debug/library/<section_id>")
@@ -251,6 +288,8 @@ def api_library_combined():
         order_column = "last_played"
     if order_dir not in ("asc", "desc"):
         order_dir = "asc"
+    # Optional: force show the "calculating file sizes" banner for testing (e.g. ?show_calculating_alert=1)
+    force_calculating_alert = request.args.get("show_calculating_alert", "").strip() in ("1", "true", "yes")
     try:
         libs = tautulli.get_tautulli_libraries()
         if not isinstance(libs, list):
@@ -263,15 +302,17 @@ def api_library_combined():
                 "recordsFiltered": 0,
                 "recordsTotal": 0,
                 "section_type": section_type,
+                "tautulli_calculating_file_sizes": force_calculating_alert,
             })
 
         fetch_per_lib = max(length + start, 50)
         all_items = []
+        tautulli_calculating_file_sizes = False
         for lib in libs_of_type:
             sid = lib.get("section_id")
             sname = (lib.get("section_name") or "").strip() or "—"
             try:
-                data = tautulli.get_library_media(
+                resp = tautulli.get_library_media_response(
                     sid,
                     length=fetch_per_lib,
                     start=0,
@@ -280,14 +321,27 @@ def api_library_combined():
                     order_dir=order_dir,
                     section_type=section_type,
                 )
-                items = data.get("data") if isinstance(data.get("data"), list) else []
+                if tautulli.response_indicates_calculating_file_sizes(resp):
+                    tautulli_calculating_file_sizes = True
+                if resp.get("result") != "success":
+                    continue
+                inner = resp.get("data")
+                if isinstance(inner, dict):
+                    items = inner.get("data") if isinstance(inner.get("data"), list) else []
+                elif isinstance(inner, list):
+                    items = inner
+                else:
+                    items = []
                 for item in items:
                     if isinstance(item, dict):
                         item = dict(item)
                         item["library_name"] = sname
                         item["section_id"] = str(sid)
                         all_items.append(item)
-            except Exception:
+            except (requests.RequestException, ValueError, Exception) as e:
+                err_str = str(e).lower()
+                if "calculating" in err_str and ("file size" in err_str or "file sizes" in err_str or "filesize" in err_str):
+                    tautulli_calculating_file_sizes = True
                 continue
 
         if library_name_filter:
@@ -339,6 +393,7 @@ def api_library_combined():
             "recordsTotal": total,
             "section_type": section_type,
             "libraries": [l.get("section_name") or "" for l in libs_of_type],
+            "tautulli_calculating_file_sizes": tautulli_calculating_file_sizes or force_calculating_alert,
         }
         return jsonify(out)
     except Exception as e:
@@ -414,30 +469,132 @@ def api_overseerr_info():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/item-ids")
+def api_item_ids():
+    """Return guid and extracted IDs for a rating_key (for remove flow when library item has no guid)."""
+    rating_key = request.args.get("rating_key")
+    if not rating_key:
+        return jsonify({"error": "rating_key required"}), 400
+    try:
+        meta = tautulli.get_metadata(rating_key)
+        if isinstance(meta, list) and meta:
+            meta = meta[0]
+        if isinstance(meta, dict) and "metadata" in meta and isinstance(meta["metadata"], dict):
+            meta = meta["metadata"]
+        if not isinstance(meta, dict):
+            meta = {}
+        ids = extract_ids(meta)
+        return jsonify({
+            "guid": meta.get("guid") or meta.get("grandparent_guid"),
+            "tmdb_id": ids["tmdb"],
+            "tvdb_id": ids["tvdb"],
+            "imdb_id": ids["imdb"],
+            "mbid": ids["mbid"],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/refresh-plex", methods=["POST"])
+def api_refresh_plex():
+    """Batch refresh Plex libraries for given section_ids (called after all removals complete).
+
+    Expects JSON:
+    {
+        "section_ids": ["1", "2", ...]  or [{"section_id": "1", "section_type": "movie"}, ...]
+    }
+    """
+    if not PLEX_URL or not PLEX_TOKEN:
+        return jsonify({"error": "Plex not configured"}), 400
+    body = request.get_json(force=True, silent=True) or {}
+    section_ids = body.get("section_ids", [])
+    if not section_ids:
+        return jsonify({"refreshed": []})
+    refreshed = []
+    errors = []
+    for item in section_ids:
+        # Handle both string (legacy) and dict formats
+        if isinstance(item, dict):
+            sid = str(item.get("section_id", ""))
+        else:
+            sid = str(item)
+        if not sid:
+            continue
+        try:
+            plex_svc.plex_refresh_library(sid)
+            refreshed.append(sid)
+        except Exception as e:
+            errors.append({"section_id": sid, "error": str(e)})
+    return jsonify({"refreshed": refreshed, "errors": errors})
+
+
+@api_bp.route("/refresh-tautulli", methods=["POST"])
+def api_refresh_tautulli():
+    """Batch refresh Tautulli media info for given sections (called after Plex refresh).
+
+    Expects JSON:
+    {
+        "sections": [{"section_id": "1", "section_type": "movie"}, ...]
+    }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    sections = body.get("sections", [])
+    if not sections:
+        return jsonify({"refreshed": []})
+    refreshed = []
+    errors = []
+    for section in sections:
+        sid = section.get("section_id")
+        section_type = section.get("section_type")
+        if not sid:
+            continue
+        try:
+            if tautulli.refresh_tautulli_media_info(str(sid), section_type):
+                refreshed.append(sid)
+            else:
+                errors.append({"section_id": sid, "error": "Refresh failed"})
+        except Exception as e:
+            errors.append({"section_id": sid, "error": str(e)})
+    return jsonify({"refreshed": refreshed, "errors": errors})
+
+
 @api_bp.route("/remove", methods=["POST"])
 def api_remove():
     """
-    Remove media from Seerr, Radarr/Sonarr/Lidarr (all instances), and
-    Tautulli.
+    Remove media from Seerr and Radarr/Sonarr/Lidarr (all instances).
+    Tautulli is not modified — items will disappear after Plex scans and Tautulli refreshes media info.
 
     Expects JSON:
     {
         "rating_key": "...",
         "section_id": "...",
         "media_type": "movie" | "show" | "artist",
-        "tmdb_id": "...",    (optional — resolved via Tautulli if missing)
-        "tvdb_id": "...",    (optional — resolved via Tautulli if missing)
-        "mbid": "..."        (optional — resolved via Tautulli if missing)
+        "guid": "...",       (optional — from library item or /api/item-ids)
+        "tmdb_id": "...",   (optional — resolved via guid or Tautulli if missing)
+        "tvdb_id": "...",
+        "imdb_id": "...",
+        "mbid": "..."
     }
     """
     body = request.get_json(force=True)
     rating_key = body.get("rating_key")
     section_id = body.get("section_id")
     media_type = body.get("media_type", "movie")
+    guid = body.get("guid")
+    title = body.get("title")
+    year = body.get("year")
     tmdb_id = body.get("tmdb_id")
     tvdb_id = body.get("tvdb_id")
     imdb_id = body.get("imdb_id")
     mbid = body.get("mbid")
+
+    # Resolve IDs from guid first (from library item); then from Tautulli get_metadata
+    if guid:
+        ids_from_guid = extract_ids({"guid": guid})
+        tmdb_id = tmdb_id or ids_from_guid["tmdb"]
+        tvdb_id = tvdb_id or ids_from_guid["tvdb"]
+        imdb_id = imdb_id or ids_from_guid["imdb"]
+        mbid = mbid or ids_from_guid["mbid"]
 
     results = {"overseerr": None, "tautulli": None}
 
@@ -449,12 +606,37 @@ def api_remove():
                 or (media_type == "artist" and not mbid)
             )
             if needs_resolve:
-                meta = tautulli.get_metadata(rating_key)
-                ids = extract_ids(meta)
+                meta_raw = tautulli.get_metadata(rating_key)
+                # Pass raw response so deep scan finds guids anywhere in the structure
+                ids = extract_ids(meta_raw)
                 tmdb_id = tmdb_id or ids["tmdb"]
                 tvdb_id = tvdb_id or ids["tvdb"]
                 imdb_id = imdb_id or ids["imdb"]
                 mbid = mbid or ids["mbid"]
+
+                # Fallback: find item in library media by rating_key and use its guid
+                if (not tmdb_id and not imdb_id and media_type == "movie") or (
+                    media_type == "show" and not tvdb_id
+                ):
+                    try:
+                        if section_id:
+                            lib_data = tautulli.get_library_media(
+                                section_id,
+                                length=500,
+                                start=0,
+                                section_type=media_type,
+                            )
+                            items = lib_data.get("data") if isinstance(lib_data.get("data"), list) else []
+                            for item in items:
+                                if isinstance(item, dict) and str(item.get("rating_key")) == str(rating_key):
+                                    ids2 = extract_ids(item)
+                                    tmdb_id = tmdb_id or ids2["tmdb"]
+                                    tvdb_id = tvdb_id or ids2["tvdb"]
+                                    imdb_id = imdb_id or ids2["imdb"]
+                                    mbid = mbid or ids2["mbid"]
+                                    break
+                    except Exception:
+                        pass
 
         has_ids = tmdb_id or tvdb_id or imdb_id or mbid
 
@@ -478,7 +660,31 @@ def api_remove():
                 results["overseerr"] = f"error: {e}"
 
         if not has_ids:
-            results["arr"] = "skipped (no IDs resolved)"
+            skip_msg = "skipped (no IDs resolved)"
+            results["arr"] = skip_msg
+            if media_type == "movie":
+                # Fallback: find movie in Radarr by title (+ year) and delete
+                if title and str(title).strip():
+                    for i, inst in enumerate(RADARR_INSTANCES):
+                        key = f"radarr_{i + 1}"
+                        try:
+                            movie = radarr.radarr_find_movie_by_title(inst, title, year)
+                            if movie:
+                                radarr.radarr_delete_movie(inst, movie["id"], delete_files=True)
+                                results[key] = "removed"
+                            else:
+                                results[key] = "not_found"
+                        except Exception as e:
+                            results[key] = f"error: {e}"
+                else:
+                    for i in range(len(RADARR_INSTANCES)):
+                        results[f"radarr_{i + 1}"] = skip_msg
+            elif media_type == "show":
+                for i in range(len(SONARR_INSTANCES)):
+                    results[f"sonarr_{i + 1}"] = skip_msg
+            elif media_type == "artist":
+                for i in range(len(LIDARR_INSTANCES)):
+                    results[f"lidarr_{i + 1}"] = skip_msg
         elif media_type == "movie":
             for i, inst in enumerate(RADARR_INSTANCES):
                 key = f"radarr_{i + 1}"
@@ -529,18 +735,18 @@ def api_remove():
                 except Exception as e:
                     results[key] = f"error: {e}"
 
-        try:
-            if rating_key:
-                deleted = tautulli.delete_tautulli_history(rating_key)
-                if section_id:
-                    tautulli.delete_tautulli_media_info_cache(section_id, rating_key)
-                results["tautulli"] = (
-                    f"removed ({deleted} history entries cleared)"
-                )
-            else:
-                results["tautulli"] = "skipped (no rating_key)"
-        except Exception as e:
-            results["tautulli"] = f"error: {e}"
+        # Plex refresh handled by batch endpoint after all items are processed
+        arr_succeeded = any(
+            v == "removed"
+            for k, v in results.items()
+            if k.startswith("radarr_") or k.startswith("sonarr_") or k.startswith("lidarr_")
+        )
+        if arr_succeeded and section_id:
+            results["_section_id_for_refresh"] = section_id
+        results["plex"] = "pending" if arr_succeeded and section_id else "skipped"
+
+        # Tautulli removal disabled — items will disappear after Plex scans and Tautulli refreshes media info
+        results["tautulli"] = "skipped"
 
         return jsonify(results)
 

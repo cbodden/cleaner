@@ -14,6 +14,10 @@ services:
       - TAUTULLI_URL=http://tautulli:8181
       - TAUTULLI_API_KEY=your_tautulli_api_key
 
+      # Plex Media Server (optional — refresh library after *arr deletes; then Tautulli refresh)
+      - PLEX_URL=http://plex:32400
+      - PLEX_TOKEN=your_plex_token
+
       # Seerr (Overseerr-compatible)
       - OVERSEERR_URL=http://overseerr:5055
       - OVERSEERR_API_KEY=your_seerr_api_key
