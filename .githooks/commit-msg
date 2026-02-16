@@ -1,0 +1,15 @@
+#!/bin/sh
+# Remove Co-authored-by lines from commit messages (e.g. added by Cursor/IDE).
+# Git invokes this with $1 = path to the file containing the commit message.
+# We are allowed to edit that file in place.
+
+msgfile="$1"
+[ -f "$msgfile" ] || exit 0
+
+# Remove lines that look like "Co-authored-by: ..." (with optional leading whitespace)
+# Use temp file for portability (sed -i behavior differs on Linux vs macOS).
+tmp=$(mktemp) || exit 0
+grep -v '^[[:space:]]*Co-authored-by:' "$msgfile" > "$tmp" && mv "$tmp" "$msgfile"
+rm -f "$tmp" 2>/dev/null
+
+exit 0

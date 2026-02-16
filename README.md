@@ -44,6 +44,14 @@ cp .env.example .env
 # Edit .env with your API keys and URLs
 ```
 
+**Optional — Git hook:** To strip `Co-authored-by` lines from commit messages (e.g. added by Cursor/IDE), use the included hook:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The `.githooks/commit-msg` hook runs on every commit and removes any `Co-authored-by:` line from the message.
+
 ### Environment variables
 
 | Variable | Description |
