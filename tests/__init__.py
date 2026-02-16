@@ -1,1 +1,1 @@
-# Tests for Media Cleaner
+# Tests for Magic-Erasarr

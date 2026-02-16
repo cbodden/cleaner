@@ -4,7 +4,7 @@ FROM python:3.12-alpine
 
 ARG VERSION=1.6.0
 LABEL maintainer="cbodden" \
-      org.opencontainers.image.source="https://github.com/cbodden/cleaner" \
+      org.opencontainers.image.source="https://github.com/cbodden/Magic-Erasarr" \
       version="${VERSION}"
 
 ENV PYTHONUNBUFFERED=1 \

@@ -1,8 +1,8 @@
-# Media Cleaner — see README for setup. Image tag: latest (master) or dev (dev branch).
+# Magic-Erasarr — see README for setup. Image tag: latest (master) or dev (dev branch).
 services:
-  cleaner:
-    image: ghcr.io/cbodden/cleaner
-    container_name: media-cleaner
+  magic-erasarr:
+    image: ghcr.io/cbodden/magic-erasarr
+    container_name: magic-erasarr
     ports:
       - "5000:5000"
     environment:
