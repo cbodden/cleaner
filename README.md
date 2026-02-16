@@ -6,6 +6,8 @@
 
 <p align="center">
   <img src="images/screenshot.jpg" width="600" />
+  <br><br>
+  <img src="images/screenshot2.jpg" width="600" />
 </p>
 
 ## What it does
